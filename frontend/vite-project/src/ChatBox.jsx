@@ -3,7 +3,7 @@ import io from "socket.io-client";
 import "./App.css";
 
 
-const socket = io.connect("http://192.168.85.93:5000");
+const socket = io.connect("https://chor-sipahi.onrender.com");
 
 function App() {
   const [name, setName] = useState("");
