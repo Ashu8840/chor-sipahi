@@ -1,0 +1,444 @@
+/* General styles */
+
+body {
+  margin: 0;
+  padding: 0;
+  font-family: "Poppins", sans-serif;
+  background: linear-gradient(135deg, #1e3c72, #2a5298);
+  color: #f8f8f8;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: start;
+  min-height: 100vh;
+  padding-top: 20px;
+}
+
+h1,
+h2 {
+  text-align: center;
+  margin: 0;
+  font-weight: 600;
+}
+
+/* Welcome message */
+.welcome-message {
+  font-size: 2.5rem;
+  color: #ffdd40;
+  text-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+  margin-bottom: 20px;
+}
+
+/* Scoreboard container */
+.scoreboard {
+  width: 90%;
+  max-width: 800px;
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
+  border-radius: 15px;
+  padding: 20px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+}
+
+/* Table styles */
+.scoreboard table {
+  width: 100%;
+  border-collapse: collapse;
+  overflow: hidden;
+  border-radius: 10px;
+}
+
+.scoreboard table thead {
+  background: rgba(255, 221, 64, 0.8);
+  color: #333;
+  font-weight: bold;
+}
+
+.scoreboard table thead th {
+  padding: 12px 20px;
+  text-transform: uppercase;
+}
+
+.scoreboard table tbody {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.scoreboard table tbody tr {
+  transition: all 0.2s ease-in-out;
+}
+
+.scoreboard table tbody tr:hover {
+  background: rgba(255, 221, 64, 0.2);
+  transform: scale(1.02);
+}
+
+.scoreboard table tbody td {
+  padding: 12px 20px;
+  text-align: center;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Highlighting roles */
+.role {
+  font-weight: bold;
+  padding: 5px 10px;
+  border-radius: 5px;
+}
+
+.role.Raja {
+  background: #ffdd40;
+  color: #333;
+}
+
+.role.Mantri {
+  background: #88d498;
+  color: #222;
+}
+
+.role.Police {
+  background: #6495ed;
+  color: #fff;
+}
+
+.role.Chor {
+  background: #e74c3c;
+  color: #fff;
+}
+
+/* Round information */
+.round-info {
+  font-size: 1.5rem;
+  color: #dff9fb;
+  margin: 20px 0;
+}
+
+/* Button styles */
+button {
+  padding: 10px 20px;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #fff;
+  background: #ff5e57;
+  border: none;
+  border-radius: 8px;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+  cursor: pointer;
+  transition: all 0.2s ease-in-out;
+}
+
+button:hover {
+  background: #ff7849;
+  transform: translateY(-2px);
+}
+
+button:active {
+  background: #ff3d34;
+  transform: translateY(0);
+}
+
+/* Responsive Design */
+@media screen and (max-width: 600px) {
+  .welcome-message {
+    font-size: 2rem;
+  }
+
+  .round-info {
+    font-size: 1.2rem;
+  }
+
+  .scoreboard table thead th,
+  .scoreboard table tbody td {
+    padding: 8px 12px;
+    font-size: 0.9rem;
+  }
+  .guess-buttons{
+    margin: 5px;
+  }
+
+  button {
+    font-size: 0.9rem;
+    padding: 8px 15px;
+  }
+}
+
+input{
+  margin: 40px;
+  width: 200px;
+  height: 20px;
+  padding: 10px;
+  border-radius: 10px;
+}
+/* Container for the splash screen */
+.splash-container {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  width: 100%;
+  
+  color: white;
+  font-family: Arial, sans-serif;
+  text-align: center;
+}
+
+/* Logo or App Title Styling */
+.logo-container {
+  margin-bottom: 30px;
+}
+
+.app-title {
+  font-size: 2.5rem;
+  font-weight: bold;
+  text-shadow: 2px 2px 5px rgba(0, 0, 0, 0.5);
+}
+
+/* Loading Bar Container */
+.loading-bar-container {
+  width: 80%;
+  height: 10px;
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 5px;
+  overflow: hidden;
+  margin: 20px 0;
+}
+
+/* Loading Bar Animation */
+.loading-bar {
+  height: 100%;
+  background: #00ff99; /* Bright green bar */
+  border-radius: 5px;
+  transition: width 0.05s ease-in-out;
+}
+
+/* Loading Text */
+.loading-text {
+  font-size: 1.2rem;
+  margin-top: 10px;
+  text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.4);
+}
+/*chat css*/
+/* Chat App Container */
+/* Chatbot Icon */
+.chatbot-icon {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  background-color: #0078ff;
+  border-radius: 50%;
+  width: 60px;
+  height: 60px;
+  display: flex;
+  align-items: center;
+  z-index: 6000;
+  justify-content: center;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+  cursor: pointer;
+  transition: transform 0.3s ease-in-out, box-shadow 0.3s ease-in-out;
+}
+.chatbot-icon.active {
+  transform: rotate(180deg);
+}
+
+/* Chat Box */
+.chat-box {
+  position: fixed;
+  bottom: 90px;
+  right: 20px;
+  width: 44vh;
+  max-height: 500px;
+  background-color: #ffffff;
+  border-radius: 10px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  z-index: 1000;
+  min-height: 500px;
+    
+}
+
+.chat-header {
+  background-color: #0078ff;
+  color: #fff7f7;
+  padding: 15px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 16px;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  color: #ffffff;
+  font-size: 18px;
+  cursor: pointer;
+}
+
+.chat-window {
+  flex: 1;
+  padding: 10px;
+  overflow-y: auto;
+  background-color: #f7f7f7;
+}
+
+.chat-input {
+  display: flex;
+  padding: 10px;
+  background-color: #eee;
+  border-top: 1px solid #ccc;
+  height: 50px;
+}
+
+.chat-input input {
+  flex: 1;
+  padding: 10px;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  margin: 2px;
+
+}
+
+.chat-input button {
+  background-color: #0078ff;
+  color: #fff;
+  height: 40px;
+  border: none;
+  border-radius: 5px;
+  padding: 10px 15px;
+  cursor: pointer;
+  max-height: 40px;
+    margin: 3px;
+}
+
+.chat-message {
+  margin-bottom: 10px;
+  padding: 10px;
+  border-radius: 5px;
+  color: rgb(255, 255, 255);
+}
+
+.message-sent {
+  background-color: #007d1b;
+  align-self: flex-end;
+}
+
+.message-received {
+  background-color: #2674f3;
+  align-self: flex-start;
+  color: white;
+}
+.name-input input{
+  margin: 15px;
+}
+.name-input h2{
+  color: rgb(255, 255, 255);
+  padding-top: 20px;
+  height: 45px;
+  margin-bottom: 150px;
+  
+  background-color: #0078ff;
+  
+}
+.role-card {
+  position: fixed;
+  top: 20%;
+  left: 5%;
+  transform: translate(-50%, -50%);
+  background: #fff;
+  border: 2px solid #ddd;
+  border-radius: 8px;
+  box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.2);
+  padding: 20px;
+  text-align: center;
+  width: 250px;
+  font-family: Arial, sans-serif;
+  z-index: 2000;
+}
+
+.role-card h3 {
+  margin-bottom: 10px;
+  font-size: 18px;
+  color: #333;
+}
+
+.role-card p {
+  font-size: 24px;
+  font-weight: bold;
+}
+
+.role.Raja {
+  color: rgb(245, 144, 13);
+}
+
+.role.Mantri {
+  color: green;
+}
+
+.role.Police {
+  color: blue;
+}
+
+.role.Chor {
+  color: rgb(246, 240, 240);
+}
+@media (min-width: 768px) and (max-width: 1824px) {
+  /* Styles for tablets */
+  .role-card {
+    top: 40%;
+  left: 41%;
+  
+  }
+  .scoreboard{
+    width: 600px;
+  }
+}
+@media(max-width:500px){
+  .name-input input{
+    width: 55%;
+  }
+  .name-input button{
+    height: 2.5rem;
+  }
+}
+
+
+
+.role-card,
+.winner-card,
+.result-card,
+.shuffling-card {
+  background: #fff;
+  border-radius: 8px;
+  padding: 16px;
+  text-align: center;
+  margin: 20px auto;
+  width: 300px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.winner-card {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.shuffle-button {
+  background: #007bff;
+  color: #fff;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.shuffle-button:hover {
+  background: #0056b3;
+}
+
+.shuffling-card {
+  font-size: 20px;
+  color: orange;
+}
