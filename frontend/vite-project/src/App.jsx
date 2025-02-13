@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import ChatBox from "./ChatBox.jsx";
 import Confetti from "react-confetti";
 
-const socket = io("http://192.168.85.93:5000");
+const socket = io("https://chor-sipahi.onrender.com");
 
 function App() {
   const [name, setName] = useState("");
