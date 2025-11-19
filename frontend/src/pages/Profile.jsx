@@ -20,9 +20,10 @@ export default function Profile() {
   const fetchUserStats = async () => {
     try {
       const response = await matchAPI.getPlayerStats(user._id);
-      setStats(response.data.player);
+      setStats(response.data.player || {});
     } catch (error) {
-      console.error("Failed to fetch stats");
+      console.error("Failed to fetch stats:", error);
+      setStats({});
     } finally {
       setLoading(false);
     }
@@ -30,7 +31,7 @@ export default function Profile() {
 
   if (loading) return <Loading />;
 
-  const totalMatches = stats?.stats?.totalMatches || 0;
+  const totalMatches = stats?.stats?.matchesPlayed || 0;
   const wins = stats?.stats?.wins || 0;
   const losses = stats?.stats?.losses || 0;
   const winRate = calculateWinRate(wins, totalMatches);
@@ -48,26 +49,30 @@ export default function Profile() {
           <div className="card">
             <div className="flex flex-col md:flex-row items-center md:items-start space-y-4 md:space-y-0 md:space-x-6">
               <div className="w-32 h-32 bg-gray-800 rounded-full flex items-center justify-center text-5xl font-bold">
-                {user.username.charAt(0).toUpperCase()}
+                {user?.username ? user.username.charAt(0).toUpperCase() : "?"}
               </div>
 
               <div className="flex-1 text-center md:text-left">
                 <h1 className="text-4xl font-bold gradient-text">
-                  {user.displayName || user.username}
+                  {user?.displayName || user?.username || "User"}
                 </h1>
-                <p className="text-gray-400 text-lg">@{user.username}</p>
+                <p className="text-gray-400 text-lg">
+                  @{user?.username || "unknown"}
+                </p>
                 <p className="text-gray-500 mt-2">
                   Member since{" "}
-                  {new Date(stats.memberSince).toLocaleDateString()}
+                  {stats?.createdAt
+                    ? new Date(stats.createdAt).toLocaleDateString()
+                    : "N/A"}
                 </p>
               </div>
 
               <div className="flex flex-col space-y-2">
                 <div className="badge bg-primary-600 text-white">
                   <Trophy className="w-4 h-4 mr-1" />
-                  {stats.stats.totalPoints} Points
+                  {stats?.stats?.totalPoints || 0} Points
                 </div>
-                {user.isAdmin && (
+                {user?.isAdmin && (
                   <div className="badge bg-yellow-600 text-white">Admin</div>
                 )}
               </div>
@@ -100,12 +105,33 @@ export default function Profile() {
           <div className="card">
             <h2 className="text-2xl font-bold mb-6">Role Statistics</h2>
             <div className="grid md:grid-cols-2 gap-6">
-              {["Raja", "Mantri", "Sipahi", "Chor"].map((role) => {
-                const roleStats = stats.stats.roles[role];
-                const roleWinRate = calculateWinRate(
-                  roleStats.wins,
-                  roleStats.timesPlayed
-                );
+              {[
+                {
+                  role: "Raja",
+                  wins: stats?.stats?.rajaWins || 0,
+                  played: stats?.stats?.rajaWins || 0,
+                },
+                {
+                  role: "Mantri",
+                  wins: stats?.stats?.mantriWins || 0,
+                  played: stats?.stats?.mantriWins || 0,
+                },
+                {
+                  role: "Sipahi",
+                  wins: stats?.stats?.sipahiCorrect || 0,
+                  played:
+                    (stats?.stats?.sipahiCorrect || 0) +
+                    (stats?.stats?.sipahiWrong || 0),
+                },
+                {
+                  role: "Chor",
+                  wins: stats?.stats?.chorEscaped || 0,
+                  played:
+                    (stats?.stats?.chorEscaped || 0) +
+                    (stats?.stats?.chorCaught || 0),
+                },
+              ].map(({ role, wins, played }) => {
+                const roleWinRate = calculateWinRate(wins, played);
 
                 return (
                   <div
@@ -115,20 +141,18 @@ export default function Profile() {
                     <div className="flex items-center justify-between">
                       <RoleBadge role={role} className="text-xl" />
                       <span className="text-2xl font-bold">
-                        {roleStats.points} pts
+                        {played} played
                       </span>
                     </div>
 
                     <div className="space-y-2 text-sm">
                       <div className="flex justify-between">
                         <span className="text-gray-400">Times Played:</span>
-                        <span className="font-semibold">
-                          {roleStats.timesPlayed}
-                        </span>
+                        <span className="font-semibold">{played}</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-gray-400">Wins:</span>
-                        <span className="font-semibold">{roleStats.wins}</span>
+                        <span className="font-semibold">{wins}</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-gray-400">Win Rate:</span>

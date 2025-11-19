@@ -47,6 +47,12 @@ export const initializeSocket = (io) => {
 
     socket.on("join_room", async ({ roomId, passkey }) => {
       try {
+        // Ensure activeConnections has the latest socket ID
+        activeConnections.set(socket.userId, socket.id);
+        logger.info(
+          `${socket.username} joining room ${roomId}, socket ID: ${socket.id}`
+        );
+
         const room = await Room.findOne({ roomId }).select("+passkey");
 
         if (!room) {
@@ -98,6 +104,57 @@ export const initializeSocket = (io) => {
           return socket.emit("error", { message: "Room not found" });
         }
 
+        // If game is in progress, end the game and declare winner
+        if (room.status === "playing") {
+          logger.info(
+            `Player ${socket.username} left during active game in room ${roomId}`
+          );
+
+          // Find the winner (highest score)
+          const scores = room.gameState?.scores || {};
+          let highestScore = -1;
+          let winnerId = null;
+          let winnerName = null;
+
+          Object.entries(scores).forEach(([userId, score]) => {
+            if (score > highestScore) {
+              highestScore = score;
+              winnerId = userId;
+            }
+          });
+
+          // Get winner details
+          if (winnerId) {
+            const winnerPlayer = room.players.find(
+              (p) => p.userId.toString() === winnerId
+            );
+            winnerName =
+              winnerPlayer?.displayName || winnerPlayer?.username || "Unknown";
+          }
+
+          // End the game
+          room.status = "finished";
+          await room.save();
+
+          // Notify all players that game ended
+          io.to(roomId).emit("game_finished", {
+            reason: "player_left",
+            winner: winnerId
+              ? {
+                  userId: winnerId,
+                  username: winnerName,
+                  score: highestScore,
+                }
+              : null,
+            finalScores: scores,
+            message: `Game ended because ${socket.username} left the room`,
+          });
+
+          logger.info(
+            `Game ended in room ${roomId}. Winner: ${winnerName} with ${highestScore} points`
+          );
+        }
+
         await room.removePlayer(socket.userId);
 
         socket.leave(roomId);
@@ -142,15 +199,16 @@ export const initializeSocket = (io) => {
         const updatedRoom = await Room.findOne({ roomId }).select("-passkey");
         io.to(roomId).emit("room_updated", updatedRoom);
 
+        // Check if all 4 players are ready
         const allReady = room.players.every((p) => p.isReady);
-        if (allReady && room.players.length >= 2) {
-          setTimeout(() => {
-            socket.emit("game_start_countdown", { seconds: 3 });
-          }, 500);
+        const hasEnoughPlayers = room.players.length === 4;
 
-          setTimeout(async () => {
-            await startGame(io, roomId);
-          }, 3500);
+        if (allReady && hasEnoughPlayers) {
+          // Notify host that game can be started
+          const hostSocketId = activeConnections.get(room.host.toString());
+          if (hostSocketId) {
+            io.to(hostSocketId).emit("can_start_game", { roomId });
+          }
         }
 
         logger.info(
@@ -174,19 +232,71 @@ export const initializeSocket = (io) => {
           return socket.emit("error", { message: "Only host can start game" });
         }
 
-        const validation = GameEngine.validateGameState(room);
-        if (!validation.valid) {
-          return socket.emit("error", { message: validation.error });
+        // Validate: must have exactly 4 players
+        if (room.players.length !== 4) {
+          return socket.emit("error", {
+            message: "Need exactly 4 players to start",
+          });
         }
 
-        await startGame(io, roomId);
+        // Validate: all players must be ready
+        const allReady = room.players.every((p) => p.isReady);
+        if (!allReady) {
+          return socket.emit("error", { message: "All players must be ready" });
+        }
+
+        // Update room status
+        room.status = "playing";
+        room.currentRound = 1;
+
+        // Initialize scores
+        if (!room.gameState) {
+          room.gameState = {};
+        }
+        room.gameState.scores = {};
+        room.players.forEach((player) => {
+          room.gameState.scores[player.userId.toString()] = 0;
+        });
+
+        // Select random player to shuffle
+        const randomPlayerIndex = Math.floor(
+          Math.random() * room.players.length
+        );
+        const shufflePlayer = room.players[randomPlayerIndex];
+        const shufflerIdString = shufflePlayer.userId.toString();
+        room.gameState.currentShuffler = shufflerIdString;
+
+        // Save everything at once
+        await room.save();
+
+        logger.info(
+          `Shuffler selected: ${shufflerIdString} (${
+            shufflePlayer.displayName || shufflePlayer.username
+          })`
+        );
+        logger.info(`Room gameState after save:`, room.gameState);
+
+        // Notify all players that game is starting
+        io.to(roomId).emit("game_started", {
+          roomId,
+          shufflerUserId: shufflerIdString,
+          shufflerName: shufflePlayer.displayName || shufflePlayer.username,
+          round: 1,
+        });
+
+        // Also emit room_updated with full room data for anyone who joins late
+        io.to(roomId).emit("room_updated", room);
+
+        logger.info(
+          `Game started in room ${roomId} by host ${socket.username}`
+        );
       } catch (error) {
         logger.error("Start round error:", error);
         socket.emit("error", { message: "Failed to start game" });
       }
     });
 
-    socket.on("reveal_role", async ({ roomId }) => {
+    socket.on("shuffle_roles", async ({ roomId }) => {
       try {
         const room = await Room.findOne({ roomId });
 
@@ -194,18 +304,98 @@ export const initializeSocket = (io) => {
           return socket.emit("error", { message: "Room not found" });
         }
 
-        const playerRole = room.gameState.currentRoles.get(socket.userId);
+        logger.info(
+          `Shuffle request from ${socket.username} (${socket.userId})`
+        );
+        logger.info(
+          `Current shuffler in room: ${room.gameState.currentShuffler}`
+        );
+        logger.info(
+          `Comparison: "${socket.userId}" === "${
+            room.gameState.currentShuffler
+          }" = ${socket.userId === room.gameState.currentShuffler}`
+        );
 
-        if (!playerRole) {
-          return socket.emit("error", { message: "Role not assigned" });
+        // Verify this is the designated shuffler
+        if (room.gameState.currentShuffler !== socket.userId) {
+          logger.warn(`Shuffle rejected: ${socket.userId} is not the shuffler`);
+          return socket.emit("error", { message: "You are not the shuffler" });
         }
 
-        socket.emit("role_revealed", { role: playerRole });
+        // Assign roles randomly
+        const roles = ["Raja", "Mantri", "Sipahi", "Chor"];
+        const shuffledRoles = roles.sort(() => Math.random() - 0.5);
 
-        logger.info(`${socket.username} revealed role: ${playerRole}`);
+        // Create role assignments
+        room.gameState.roles = {};
+        let sipahiUserId = null;
+        let chorUserId = null;
+
+        room.players.forEach((player, index) => {
+          const userId = player.userId.toString();
+          const role = shuffledRoles[index];
+          room.gameState.roles[userId] = role;
+
+          if (role === "Sipahi") {
+            sipahiUserId = userId;
+          }
+          if (role === "Chor") {
+            chorUserId = userId;
+          }
+        });
+
+        room.gameState.currentSipahi = sipahiUserId;
+        room.gameState.chorUserId = chorUserId;
+        room.gameState.roundStartTime = new Date();
+
+        await room.save();
+
+        logger.info(`Roles assigned:`, room.gameState.roles);
+        logger.info(
+          `Active connections:`,
+          Array.from(activeConnections.keys())
+        );
+
+        // Send each player their role privately
+        let rolesAssigned = 0;
+        room.players.forEach((player) => {
+          const userId = player.userId.toString();
+          const socketId = activeConnections.get(userId);
+          const role = room.gameState.roles[userId];
+
+          logger.info(
+            `Assigning role to ${player.username} (${userId}): ${role}, socketId: ${socketId}`
+          );
+
+          if (socketId) {
+            io.to(socketId).emit("role_assigned", {
+              role,
+              roomId,
+              isSipahi: role === "Sipahi",
+            });
+            rolesAssigned++;
+          } else {
+            logger.warn(
+              `No socket connection found for user ${userId} (${player.username})`
+            );
+          }
+        });
+
+        logger.info(
+          `Total roles assigned: ${rolesAssigned} out of ${room.players.length}`
+        );
+
+        // Notify all players that roles have been assigned
+        io.to(roomId).emit("roles_shuffled", {
+          roomId,
+          sipahiUserId,
+          round: room.currentRound,
+        });
+
+        logger.info(`Roles shuffled in room ${roomId} by ${socket.username}`);
       } catch (error) {
-        logger.error("Reveal role error:", error);
-        socket.emit("error", { message: "Failed to reveal role" });
+        logger.error("Shuffle roles error:", error);
+        socket.emit("error", { message: "Failed to shuffle roles" });
       }
     });
 
@@ -217,96 +407,193 @@ export const initializeSocket = (io) => {
           return socket.emit("error", { message: "Room not found" });
         }
 
-        const playerRole = room.gameState.currentRoles.get(socket.userId);
-
+        // Verify this is the Sipahi
+        const playerRole = room.gameState.roles[socket.userId];
         if (playerRole !== "Sipahi") {
           return socket.emit("error", { message: "Only Sipahi can guess" });
         }
 
-        if (room.gameState.sipahiGuessed) {
+        // Verify guess hasn't been made yet
+        if (room.gameState.guessedUserId) {
           return socket.emit("error", { message: "Already guessed" });
         }
 
-        room.gameState.sipahiGuessed = true;
-        room.gameState.guessedChor = guessedUserId;
+        // Get the actual Chor
+        const actualChorUserId = room.gameState.chorUserId;
+        const isCorrect = actualChorUserId === guessedUserId;
 
-        const roundResult = GameEngine.processRound(
-          room.players,
-          Array.from(room.gameState.currentRoles.values()),
-          guessedUserId
-        );
+        // Calculate points for all players
+        const pointsDistribution = {};
+        room.players.forEach((player) => {
+          const userId = player.userId.toString();
+          const role = room.gameState.roles[userId];
+          let points = 0;
 
-        room.gameState.roundScores = roundResult.scores;
+          if (role === "Raja") {
+            points = isCorrect ? 1000 : 0;
+          } else if (role === "Mantri") {
+            points = isCorrect ? 500 : 0;
+          } else if (role === "Sipahi") {
+            points = isCorrect ? 300 : 0;
+          } else if (role === "Chor") {
+            points = isCorrect ? 0 : 300;
+          }
 
-        if (!room.gameState.matchId) {
-          const match = new Match({
-            matchId: room.roomId + "-match",
-            players: room.players.map((p) => ({
-              userId: p.userId,
-              username: p.username,
-              displayName: p.displayName,
-            })),
-            status: "in-progress",
-            startedAt: Date.now(),
-          });
-          await match.save();
-          room.gameState.matchId = match.matchId;
-        }
+          pointsDistribution[userId] = points;
 
-        const match = await Match.findOne({ matchId: room.gameState.matchId });
-
-        match.rounds.push({
-          roundNumber: room.currentRound,
-          roles: roundResult.roles,
-          sipahi: room.players.find(
-            (p) => roundResult.roles.get(p.userId.toString()) === "Sipahi"
-          )?.userId,
-          chor: roundResult.chorUserId,
-          guessedPlayer: guessedUserId,
-          correctGuess: roundResult.correctGuess,
-          roundScores: roundResult.scores,
+          // Update total scores
+          if (!room.gameState.scores[userId]) {
+            room.gameState.scores[userId] = 0;
+          }
+          room.gameState.scores[userId] += points;
         });
 
-        await match.save();
+        // Mark gameState as modified so MongoDB saves the changes
+        room.markModified("gameState");
+
+        // Save guess result
+        room.gameState.guessedUserId = guessedUserId;
+        room.gameState.isCorrectGuess = isCorrect;
+        room.gameState.pointsDistribution = pointsDistribution;
+
         await room.save();
 
-        io.to(roomId).emit("round_result", {
-          correctGuess: roundResult.correctGuess,
-          actualChor: roundResult.chorUserId,
-          guessedUser: guessedUserId,
-          scores: Object.fromEntries(roundResult.scores),
-          roles: Object.fromEntries(roundResult.roles),
+        logger.info(`Points distribution for round:`, pointsDistribution);
+        logger.info(`Total scores after round:`, room.gameState.scores);
+
+        // Get guessed player name
+        const guessedPlayer = room.players.find(
+          (p) => p.userId.toString() === guessedUserId
+        );
+        const chorPlayer = room.players.find(
+          (p) => p.userId.toString() === actualChorUserId
+        );
+
+        // Reveal results to all players
+        logger.info(
+          `Sending guess_result with totalScores:`,
+          room.gameState.scores
+        );
+        io.to(roomId).emit("guess_result", {
+          roomId,
+          sipahiUserId: socket.userId,
+          sipahiName: socket.user.displayName || socket.username,
+          guessedUserId,
+          guessedName: guessedPlayer.displayName || guessedPlayer.username,
+          actualChorUserId,
+          chorName: chorPlayer.displayName || chorPlayer.username,
+          isCorrect,
+          pointsDistribution,
+          totalScores: room.gameState.scores,
+          roles: room.gameState.roles,
         });
 
-        if (room.currentRound >= room.totalRounds) {
-          setTimeout(async () => {
-            await endGame(io, roomId);
-          }, 5000);
-        } else {
-          setTimeout(async () => {
-            room.currentRound += 1;
-            room.gameState.sipahiGuessed = false;
-            room.gameState.guessedChor = null;
-
-            const newRoles = GameEngine.assignRoles(room.players.length);
-            room.gameState.currentRoles = new Map(
-              room.players.map((p, i) => [p.userId.toString(), newRoles[i]])
-            );
-
-            await room.save();
-
-            io.to(roomId).emit("next_round", {
-              roundNumber: room.currentRound,
-              totalRounds: room.totalRounds,
-            });
-
-            logger.info(`Room ${roomId} moved to round ${room.currentRound}`);
-          }, 5000);
-        }
-
         logger.info(
-          `${socket.username} guessed ${guessedUserId} as Chor in room ${roomId}`
+          `${socket.username} guessed ${
+            isCorrect ? "correctly" : "incorrectly"
+          } in room ${roomId}`
         );
+
+        // Move to next round after 5 seconds
+        setTimeout(async () => {
+          try {
+            const updatedRoom = await Room.findOne({ roomId });
+
+            if (
+              updatedRoom &&
+              updatedRoom.currentRound < updatedRoom.totalRounds
+            ) {
+              // Start next round
+              updatedRoom.currentRound += 1;
+              updatedRoom.gameState.roles = null;
+              updatedRoom.gameState.guessedUserId = null;
+              updatedRoom.gameState.isCorrectGuess = null;
+              updatedRoom.gameState.pointsDistribution = null;
+
+              // Select new random shuffler
+              const randomIndex = Math.floor(
+                Math.random() * updatedRoom.players.length
+              );
+              const newShuffler = updatedRoom.players[randomIndex];
+              updatedRoom.gameState.currentShuffler =
+                newShuffler.userId.toString();
+
+              await updatedRoom.save();
+
+              logger.info(
+                `Sending next_round with totalScores:`,
+                updatedRoom.gameState.scores
+              );
+              io.to(roomId).emit("next_round", {
+                roomId,
+                round: updatedRoom.currentRound,
+                shufflerUserId: newShuffler.userId.toString(),
+                shufflerName: newShuffler.displayName || newShuffler.username,
+                totalScores: updatedRoom.gameState.scores,
+              });
+            } else if (updatedRoom) {
+              // Game finished
+              updatedRoom.status = "finished";
+              await updatedRoom.save();
+
+              // Determine winner
+              let winnerId = null;
+              let maxScore = -1;
+              Object.entries(updatedRoom.gameState.scores).forEach(
+                ([userId, score]) => {
+                  if (score > maxScore) {
+                    maxScore = score;
+                    winnerId = userId;
+                  }
+                }
+              );
+
+              const winner = updatedRoom.players.find(
+                (p) => p.userId.toString() === winnerId
+              );
+
+              // Update leaderboard stats for all players
+              for (const player of updatedRoom.players) {
+                try {
+                  const userId = player.userId.toString();
+                  const playerScore = updatedRoom.gameState.scores[userId] || 0;
+                  const isWinner = userId === winnerId;
+
+                  await User.findByIdAndUpdate(userId, {
+                    $inc: {
+                      "stats.matchesPlayed": 1,
+                      "stats.totalPoints": playerScore,
+                      ...(isWinner && { "stats.wins": 1 }),
+                    },
+                  });
+
+                  logger.info(
+                    `Updated stats for ${player.username}: +${playerScore} points, isWinner: ${isWinner}`
+                  );
+                } catch (err) {
+                  logger.error(
+                    `Failed to update stats for player ${player.userId}:`,
+                    err
+                  );
+                }
+              }
+
+              io.to(roomId).emit("game_finished", {
+                roomId,
+                winnerId,
+                winnerName: winner.displayName || winner.username,
+                winnerScore: maxScore,
+                finalScores: updatedRoom.gameState.scores,
+              });
+
+              logger.info(
+                `Game finished in room ${roomId}, winner: ${winner.username} with ${maxScore} points`
+              );
+            }
+          } catch (err) {
+            logger.error("Next round error:", err);
+          }
+        }, 5000);
       } catch (error) {
         logger.error("Guess chor error:", error);
         socket.emit("error", { message: "Failed to process guess" });
@@ -424,6 +711,59 @@ export const initializeSocket = (io) => {
           const room = await Room.findOne({ roomId: socket.currentRoom });
 
           if (room) {
+            // If game is in progress, end it and declare winner
+            if (room.status === "playing") {
+              logger.info(
+                `Player ${socket.username} disconnected during active game in room ${socket.currentRoom}`
+              );
+
+              // Find the winner (highest score)
+              const scores = room.gameState?.scores || {};
+              let highestScore = -1;
+              let winnerId = null;
+              let winnerName = null;
+
+              Object.entries(scores).forEach(([userId, score]) => {
+                if (score > highestScore) {
+                  highestScore = score;
+                  winnerId = userId;
+                }
+              });
+
+              // Get winner details
+              if (winnerId) {
+                const winnerPlayer = room.players.find(
+                  (p) => p.userId.toString() === winnerId
+                );
+                winnerName =
+                  winnerPlayer?.displayName ||
+                  winnerPlayer?.username ||
+                  "Unknown";
+              }
+
+              // End the game
+              room.status = "finished";
+              await room.save();
+
+              // Notify all players that game ended
+              io.to(socket.currentRoom).emit("game_finished", {
+                reason: "player_disconnected",
+                winner: winnerId
+                  ? {
+                      userId: winnerId,
+                      username: winnerName,
+                      score: highestScore,
+                    }
+                  : null,
+                finalScores: scores,
+                message: `Game ended because ${socket.username} left the room`,
+              });
+
+              logger.info(
+                `Game ended in room ${socket.currentRoom}. Winner: ${winnerName} with ${highestScore} points`
+              );
+            }
+
             await room.removePlayer(socket.userId);
 
             if (room.players.length === 0) {

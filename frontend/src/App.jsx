@@ -6,6 +6,7 @@ import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 import Lobby from "./pages/Lobby";
 import GameRoom from "./pages/GameRoom";
+import GamePanel from "./pages/GamePanel";
 import Profile from "./pages/Profile";
 import Leaderboard from "./pages/Leaderboard";
 import History from "./pages/History";
@@ -52,6 +53,14 @@ function App() {
         element={
           <PrivateRoute>
             <GameRoom />
+          </PrivateRoute>
+        }
+      />
+      <Route
+        path="/game/:roomId"
+        element={
+          <PrivateRoute>
+            <GamePanel />
           </PrivateRoute>
         }
       />

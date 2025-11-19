@@ -25,15 +25,16 @@ export default function Leaderboard() {
     try {
       if (view === "global") {
         const response = await leaderboardAPI.getLeaderboard({ period });
-        setLeaderboard(response.data.leaderboard);
+        setLeaderboard(response.data.leaderboard || []);
         setMyRank(response.data.myRank);
       } else {
         const response = await leaderboardAPI.getRoleLeaderboard(selectedRole);
-        setLeaderboard(response.data.leaderboard);
+        setLeaderboard(response.data.leaderboard || []);
         setMyRank(null);
       }
     } catch (error) {
-      console.error("Failed to fetch leaderboard");
+      console.error("Failed to fetch leaderboard:", error);
+      setLeaderboard([]);
     } finally {
       setLoading(false);
     }
@@ -124,6 +125,14 @@ export default function Leaderboard() {
 
           {loading ? (
             <Loading />
+          ) : leaderboard.length === 0 ? (
+            <div className="card text-center py-12">
+              <Trophy className="w-16 h-16 text-gray-600 mx-auto mb-4" />
+              <p className="text-gray-400 text-lg">No leaderboard data yet</p>
+              <p className="text-gray-500 text-sm mt-2">
+                Start playing matches to appear on the leaderboard!
+              </p>
+            </div>
           ) : (
             <div className="space-y-3">
               {leaderboard.map((player, index) => (
@@ -161,15 +170,17 @@ export default function Leaderboard() {
                     </div>
 
                     <div className="w-12 h-12 bg-gray-700 rounded-full flex items-center justify-center text-xl font-bold flex-shrink-0">
-                      {player.username.charAt(0).toUpperCase()}
+                      {player.username
+                        ? player.username.charAt(0).toUpperCase()
+                        : "?"}
                     </div>
 
                     <div className="flex-1">
                       <div className="font-bold text-lg">
-                        {player.displayName || player.username}
+                        {player.displayName || player.username || "Unknown"}
                       </div>
                       <div className="text-sm text-gray-400">
-                        @{player.username}
+                        @{player.username || "unknown"}
                       </div>
                     </div>
 

@@ -1,20 +1,23 @@
 import { body, validationResult } from "express-validator";
 import xss from "xss";
+import logger from "../config/logger.js";
 
-export const validate = (validations) => {
-  return async (req, res, next) => {
-    await Promise.all(validations.map((validation) => validation.run(req)));
+export const validate = (req, res, next) => {
+  const errors = validationResult(req);
+  if (errors.isEmpty()) {
+    return next();
+  }
 
-    const errors = validationResult(req);
-    if (errors.isEmpty()) {
-      return next();
-    }
+  logger.warn("Validation failed:", {
+    body: req.body,
+    errors: errors.array(),
+  });
 
-    return res.status(400).json({
-      message: "Validation failed",
-      errors: errors.array(),
-    });
-  };
+  return res.status(400).json({
+    success: false,
+    message: "Validation failed",
+    errors: errors.array(),
+  });
 };
 
 export const sanitizeInput = (fields) => {
@@ -45,6 +48,7 @@ export const signupValidation = [
     .isLength({ min: 6 })
     .withMessage("Password must be at least 6 characters"),
   body("displayName")
+    .optional()
     .trim()
     .isLength({ min: 2, max: 30 })
     .withMessage("Display name must be 2-30 characters"),
@@ -67,12 +71,10 @@ export const roomValidation = [
   body("mode")
     .isIn(["chat", "video"])
     .withMessage("Mode must be either chat or video"),
-  body("isPublic")
-    .optional()
-    .isBoolean()
-    .withMessage("isPublic must be a boolean"),
+  body("isPublic").optional().toBoolean(),
   body("passkey")
-    .optional()
+    .optional({ values: "falsy" })
+    .trim()
     .isLength({ min: 4, max: 20 })
     .withMessage("Passkey must be 4-20 characters"),
 ];

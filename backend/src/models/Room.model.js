@@ -65,7 +65,9 @@ const roomSchema = new mongoose.Schema(
       roles: mongoose.Schema.Types.Mixed,
       revealedRoles: [mongoose.Schema.Types.Mixed],
       scores: mongoose.Schema.Types.Mixed,
+      currentShuffler: String,
       currentSipahi: String,
+      chorUserId: String,
       roundStartTime: Date,
     },
     matchId: {

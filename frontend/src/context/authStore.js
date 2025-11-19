@@ -32,9 +32,9 @@ export const useAuthStore = create((set, get) => ({
   signup: async (userData) => {
     set({ loading: true, error: null });
     try {
-      console.log('Attempting signup with:', { ...userData, password: '***' });
+      console.log("Attempting signup with:", { ...userData, password: "***" });
       const response = await authAPI.signup(userData);
-      console.log('Signup response:', response.data);
+      console.log("Signup response:", response.data);
       const { token, user } = response.data;
 
       localStorage.setItem("token", token);
@@ -45,8 +45,9 @@ export const useAuthStore = create((set, get) => ({
       set({ user, token, isAuthenticated: true, loading: false });
       return { success: true };
     } catch (error) {
-      console.error('Signup error:', error);
-      const message = error.response?.data?.message || error.message || "Signup failed";
+      console.error("Signup error:", error);
+      const message =
+        error.response?.data?.message || error.message || "Signup failed";
       set({ error: message, loading: false });
       return { success: false, error: message };
     }

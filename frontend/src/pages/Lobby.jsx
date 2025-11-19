@@ -297,7 +297,7 @@ export default function Lobby() {
 function CreateRoomModal({ isOpen, onClose, onSuccess }) {
   const [formData, setFormData] = useState({
     name: "",
-    mode: "random",
+    mode: "chat",
     isPublic: true,
     passkey: "",
   });
@@ -346,7 +346,7 @@ function CreateRoomModal({ isOpen, onClose, onSuccess }) {
             onChange={(e) => setFormData({ ...formData, mode: e.target.value })}
             className="input-field"
           >
-            <option value="random">Chat Only</option>
+            <option value="chat">Chat Only</option>
             <option value="video">Video Room</option>
           </select>
         </div>
