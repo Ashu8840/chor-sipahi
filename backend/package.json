@@ -1,0 +1,44 @@
+{
+  "name": "chor-sipahi-backend",
+  "version": "1.0.0",
+  "description": "Backend API for Chor-Sipahi multiplayer game",
+  "main": "src/server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js",
+    "test": "jest --coverage"
+  },
+  "keywords": [
+    "multiplayer",
+    "game",
+    "websocket",
+    "webrtc"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.5",
+    "dotenv": "^16.6.1",
+    "express": "^4.21.2",
+    "express-rate-limit": "^7.5.1",
+    "express-validator": "^7.3.1",
+    "helmet": "^7.2.0",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.20.0",
+    "multer": "^1.4.5-lts.1",
+    "sharp": "^0.33.5",
+    "socket.io": "^4.8.1",
+    "uuid": "^9.0.1",
+    "winston": "^3.18.3",
+    "xss": "^1.0.15"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.1.17",
+    "jest": "^29.7.0",
+    "nodemon": "^3.1.11",
+    "supertest": "^6.3.4"
+  }
+}

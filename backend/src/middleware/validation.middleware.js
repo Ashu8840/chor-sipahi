@@ -1,0 +1,99 @@
+import { body, validationResult } from "express-validator";
+import xss from "xss";
+
+export const validate = (validations) => {
+  return async (req, res, next) => {
+    await Promise.all(validations.map((validation) => validation.run(req)));
+
+    const errors = validationResult(req);
+    if (errors.isEmpty()) {
+      return next();
+    }
+
+    return res.status(400).json({
+      message: "Validation failed",
+      errors: errors.array(),
+    });
+  };
+};
+
+export const sanitizeInput = (fields) => {
+  return (req, res, next) => {
+    fields.forEach((field) => {
+      if (req.body[field]) {
+        req.body[field] = xss(req.body[field]);
+      }
+    });
+    next();
+  };
+};
+
+export const signupValidation = [
+  body("username")
+    .trim()
+    .isLength({ min: 3, max: 20 })
+    .withMessage("Username must be 3-20 characters")
+    .matches(/^[a-zA-Z0-9_]+$/)
+    .withMessage("Username can only contain letters, numbers, and underscores")
+    .toLowerCase(),
+  body("email")
+    .trim()
+    .isEmail()
+    .withMessage("Invalid email address")
+    .normalizeEmail(),
+  body("password")
+    .isLength({ min: 6 })
+    .withMessage("Password must be at least 6 characters"),
+  body("displayName")
+    .trim()
+    .isLength({ min: 2, max: 30 })
+    .withMessage("Display name must be 2-30 characters"),
+];
+
+export const loginValidation = [
+  body("email")
+    .trim()
+    .isEmail()
+    .withMessage("Invalid email address")
+    .normalizeEmail(),
+  body("password").notEmpty().withMessage("Password is required"),
+];
+
+export const roomValidation = [
+  body("name")
+    .trim()
+    .isLength({ min: 3, max: 50 })
+    .withMessage("Room name must be 3-50 characters"),
+  body("mode")
+    .isIn(["chat", "video"])
+    .withMessage("Mode must be either chat or video"),
+  body("isPublic")
+    .optional()
+    .isBoolean()
+    .withMessage("isPublic must be a boolean"),
+  body("passkey")
+    .optional()
+    .isLength({ min: 4, max: 20 })
+    .withMessage("Passkey must be 4-20 characters"),
+];
+
+export const reportValidation = [
+  body("reportedId")
+    .notEmpty()
+    .withMessage("Reported user ID is required")
+    .isMongoId()
+    .withMessage("Invalid user ID"),
+  body("reason")
+    .isIn([
+      "offensive-language",
+      "cheating",
+      "harassment",
+      "inappropriate-behavior",
+      "other",
+    ])
+    .withMessage("Invalid report reason"),
+  body("description")
+    .optional()
+    .isLength({ max: 500 })
+    .withMessage("Description must be less than 500 characters"),
+];

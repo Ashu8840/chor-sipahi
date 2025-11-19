@@ -1,0 +1,159 @@
+@import "tailwindcss";
+
+* {
+  border-color: rgb(31 41 55);
+}
+
+body {
+  background-color: rgb(3 7 18);
+  color: rgb(243 244 246);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+input,
+textarea,
+select {
+  background-color: rgb(17 24 39);
+  border-color: rgb(55 65 81);
+  color: rgb(243 244 246);
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+  border-color: rgb(239 68 68);
+  outline: 2px solid rgb(239 68 68 / 0.2);
+  outline-offset: 2px;
+}
+
+.btn-primary {
+  background-color: rgb(220 38 38);
+  color: white;
+  font-weight: 600;
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  transition: background-color 0.2s;
+}
+
+.btn-primary:hover {
+  background-color: rgb(185 28 28);
+}
+
+.btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-secondary {
+  background-color: rgb(55 65 81);
+  color: white;
+  font-weight: 600;
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  transition: background-color 0.2s;
+}
+
+.btn-secondary:hover {
+  background-color: rgb(75 85 99);
+}
+
+.btn-outline {
+  border: 2px solid rgb(55 65 81);
+  color: white;
+  font-weight: 600;
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  transition: all 0.2s;
+}
+
+.btn-outline:hover {
+  border-color: rgb(220 38 38);
+  background-color: rgb(220 38 38 / 0.1);
+}
+
+.card {
+  background-color: rgb(17 24 39);
+  border-radius: 0.75rem;
+  padding: 1.5rem;
+  border: 1px solid rgb(31 41 55);
+  box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1);
+}
+
+.input-field {
+  width: 100%;
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  background-color: rgb(31 41 55);
+  border: 1px solid rgb(55 65 81);
+  color: white;
+  outline: none;
+  transition: all 0.2s;
+}
+
+.input-field::placeholder {
+  color: rgb(107 114 128);
+}
+
+.input-field:focus {
+  border-color: rgb(239 68 68);
+  outline: 2px solid rgb(239 68 68 / 0.2);
+  outline-offset: 0;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem 0.75rem;
+  border-radius: 9999px;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.role-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem 0.75rem;
+  border-radius: 9999px;
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #1f2937;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #4b5563;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #6b7280;
+}
+
+.gradient-text {
+  background: linear-gradient(to right, rgb(248 113 113), rgb(220 38 38));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.shimmer {
+  animation: shimmer 2s infinite;
+  background: linear-gradient(90deg, #1f2937 0%, #374151 50%, #1f2937 100%);
+  background-size: 200% 100%;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
