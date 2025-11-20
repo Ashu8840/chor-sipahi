@@ -8,6 +8,9 @@ export default function VideoGrid({ roomId, players, currentUserId }) {
   const [remoteStreams, setRemoteStreams] = useState({});
   const [audioEnabled, setAudioEnabled] = useState(true);
   const [videoEnabled, setVideoEnabled] = useState(true);
+  // Track mute/hide state for each remote user (clientside only)
+  const [remoteAudioMuted, setRemoteAudioMuted] = useState({});
+  const [remoteVideoHidden, setRemoteVideoHidden] = useState({});
   const localVideoRef = useRef(null);
   const peerConnections = useRef({});
   const localStreamRef = useRef(null); // Keep a ref to access latest localStream
@@ -376,6 +379,22 @@ export default function VideoGrid({ roomId, players, currentUserId }) {
     }
   };
 
+  // Toggle remote user's audio on YOUR end (clientside mute)
+  const toggleRemoteAudio = (userId) => {
+    setRemoteAudioMuted((prev) => ({
+      ...prev,
+      [userId]: !prev[userId],
+    }));
+  };
+
+  // Toggle remote user's video visibility on YOUR end (clientside hide)
+  const toggleRemoteVideo = (userId) => {
+    setRemoteVideoHidden((prev) => ({
+      ...prev,
+      [userId]: !prev[userId],
+    }));
+  };
+
   const cleanup = () => {
     console.log("Cleaning up video streams...");
 
@@ -449,11 +468,26 @@ export default function VideoGrid({ roomId, players, currentUserId }) {
               name={name}
               isMuted={isCurrentUser} // Mute own audio to prevent feedback
               isLocal={isCurrentUser}
-              audioEnabled={audioEnabled}
-              videoEnabled={videoEnabled}
-              onToggleAudio={isCurrentUser ? toggleAudio : undefined}
-              onToggleVideo={isCurrentUser ? toggleVideo : undefined}
+              audioEnabled={
+                isCurrentUser ? audioEnabled : !remoteAudioMuted[player.userId]
+              }
+              videoEnabled={
+                isCurrentUser ? videoEnabled : !remoteVideoHidden[player.userId]
+              }
+              // Pass appropriate toggle functions based on local vs remote
+              onToggleAudio={
+                isCurrentUser
+                  ? toggleAudio
+                  : () => toggleRemoteAudio(player.userId)
+              }
+              onToggleVideo={
+                isCurrentUser
+                  ? toggleVideo
+                  : () => toggleRemoteVideo(player.userId)
+              }
               initialPosition={positions[index] || positions[0]}
+              userId={player.userId}
+              currentUserId={currentUserId}
             />
           );
         })}
@@ -472,6 +506,8 @@ function DraggableVideoPlayer({
   onToggleAudio,
   onToggleVideo,
   initialPosition,
+  userId,
+  currentUserId,
 }) {
   const [position, setPosition] = useState(initialPosition);
   const [isDragging, setIsDragging] = useState(false);
@@ -619,6 +655,8 @@ function DraggableVideoPlayer({
         videoEnabled={videoEnabled}
         onToggleAudio={onToggleAudio}
         onToggleVideo={onToggleVideo}
+        userId={userId}
+        currentUserId={currentUserId}
       />
     </motion.div>
   );
@@ -633,30 +671,55 @@ function VideoPlayer({
   videoEnabled,
   onToggleAudio,
   onToggleVideo,
+  userId,
+  currentUserId,
 }) {
   const videoRef = useRef(null);
+  const audioRef = useRef(null);
 
   useEffect(() => {
     if (videoRef.current && stream) {
       videoRef.current.srcObject = stream;
     }
-  }, [stream]);
+
+    // Set up audio element for remote streams
+    if (!isLocal && audioRef.current && stream) {
+      audioRef.current.srcObject = stream;
+      audioRef.current.volume = audioEnabled ? 1 : 0;
+    }
+  }, [stream, isLocal]);
+
+  // Control audio element volume for remote users (clientside mute)
+  useEffect(() => {
+    if (!isLocal && audioRef.current) {
+      audioRef.current.volume = audioEnabled ? 1 : 0;
+    }
+  }, [audioEnabled, isLocal]);
 
   return (
     <div className="relative w-48 h-36 bg-gray-900 rounded-lg overflow-hidden border-2 border-gray-700 shadow-xl">
+      {/* Video element */}
       <video
         ref={videoRef}
         autoPlay
         playsInline
-        muted={isMuted}
-        className="w-full h-full object-cover"
+        muted={isMuted || isLocal} // Always mute local video to prevent feedback
+        className={`w-full h-full object-cover transition-opacity ${
+          videoEnabled ? "opacity-100" : "opacity-0"
+        }`}
       />
 
-      {!stream && (
+      {/* Hidden audio element for remote streams (to control volume) */}
+      {!isLocal && stream && <audio ref={audioRef} autoPlay playsInline />}
+
+      {/* Show placeholder when video is hidden */}
+      {(!stream || !videoEnabled) && (
         <div className="absolute inset-0 flex items-center justify-center bg-gray-800">
           <div className="text-center">
             <VideoOff className="w-8 h-8 mx-auto text-gray-500 mb-2" />
-            <p className="text-xs text-gray-500">No video</p>
+            <p className="text-xs text-gray-500">
+              {!stream ? "No video" : "Video hidden"}
+            </p>
           </div>
         </div>
       )}
@@ -673,72 +736,60 @@ function VideoPlayer({
         </div>
       </div>
 
-      {/* Show controls for local user, show status indicators for remote users */}
-      <div className="absolute top-2 right-2 flex space-x-1 video-controls pointer-events-auto">
-        {isLocal ? (
-          <>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onToggleAudio && onToggleAudio();
-              }}
-              className={`p-1.5 rounded-full transition-colors ${
-                audioEnabled
-                  ? "bg-gray-700 hover:bg-gray-600"
-                  : "bg-red-600 hover:bg-red-500"
-              }`}
-              title={audioEnabled ? "Mute microphone" : "Unmute microphone"}
-            >
-              {audioEnabled ? (
-                <Mic className="w-3 h-3 text-white" />
-              ) : (
-                <MicOff className="w-3 h-3 text-white" />
-              )}
-            </button>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onToggleVideo && onToggleVideo();
-              }}
-              className={`p-1.5 rounded-full transition-colors ${
-                videoEnabled
-                  ? "bg-gray-700 hover:bg-gray-600"
-                  : "bg-red-600 hover:bg-red-500"
-              }`}
-              title={videoEnabled ? "Turn off camera" : "Turn on camera"}
-            >
-              {videoEnabled ? (
-                <Video className="w-3 h-3 text-white" />
-              ) : (
-                <VideoOff className="w-3 h-3 text-white" />
-              )}
-            </button>
-          </>
-        ) : (
-          /* Status indicators for remote streams */
-          <>
-            <div
-              className="p-1.5 rounded-full bg-gray-700/50"
-              title="Remote audio (controlled by user)"
-            >
-              {stream?.getAudioTracks()[0]?.enabled ? (
-                <Mic className="w-3 h-3 text-green-400" />
-              ) : (
-                <MicOff className="w-3 h-3 text-red-400" />
-              )}
-            </div>
-            <div
-              className="p-1.5 rounded-full bg-gray-700/50"
-              title="Remote video (controlled by user)"
-            >
-              {stream?.getVideoTracks()[0]?.enabled ? (
-                <Video className="w-3 h-3 text-green-400" />
-              ) : (
-                <VideoOff className="w-3 h-3 text-red-400" />
-              )}
-            </div>
-          </>
-        )}
+      {/* Show clickable controls on ALL windows */}
+      <div className="absolute top-2 right-2 flex space-x-1 video-controls pointer-events-auto z-10">
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleAudio && onToggleAudio();
+          }}
+          className={`p-1.5 rounded-full transition-colors ${
+            audioEnabled
+              ? "bg-gray-700 hover:bg-gray-600"
+              : "bg-red-600 hover:bg-red-500"
+          }`}
+          title={
+            isLocal
+              ? audioEnabled
+                ? "Mute your microphone"
+                : "Unmute your microphone"
+              : audioEnabled
+              ? `Mute ${name}'s audio (on your end only)`
+              : `Unmute ${name}'s audio`
+          }
+        >
+          {audioEnabled ? (
+            <Mic className="w-3 h-3 text-white" />
+          ) : (
+            <MicOff className="w-3 h-3 text-white" />
+          )}
+        </button>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleVideo && onToggleVideo();
+          }}
+          className={`p-1.5 rounded-full transition-colors ${
+            videoEnabled
+              ? "bg-gray-700 hover:bg-gray-600"
+              : "bg-red-600 hover:bg-red-500"
+          }`}
+          title={
+            isLocal
+              ? videoEnabled
+                ? "Turn off your camera"
+                : "Turn on your camera"
+              : videoEnabled
+              ? `Hide ${name}'s video (on your screen only)`
+              : `Show ${name}'s video`
+          }
+        >
+          {videoEnabled ? (
+            <Video className="w-3 h-3 text-white" />
+          ) : (
+            <VideoOff className="w-3 h-3 text-white" />
+          )}
+        </button>
       </div>
     </div>
   );
