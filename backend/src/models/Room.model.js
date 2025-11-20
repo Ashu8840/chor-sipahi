@@ -48,6 +48,14 @@ const roomSchema = new mongoose.Schema(
         joinedAt: { type: Date, default: Date.now },
       },
     ],
+    createdAt: {
+      type: Date,
+      default: Date.now,
+    },
+    gameStartedAt: {
+      type: Date,
+      default: null,
+    },
     status: {
       type: String,
       enum: ["waiting", "playing", "finished"],

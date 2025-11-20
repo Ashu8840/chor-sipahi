@@ -66,16 +66,17 @@ export const getRooms = async (req, res) => {
     if (mode) query.mode = mode;
     if (status) query.status = status;
 
-    const rooms = await Room.find(query)
+    // First get rooms WITH passkey to check if it exists
+    const roomsWithPasskey = await Room.find(query)
       .sort({ createdAt: -1 })
       .limit(50)
-      .select("-passkey")
+      .select("+passkey")
       .populate("host", "username displayName avatar");
 
     res.json({
       success: true,
-      count: rooms.length,
-      rooms: rooms.map((room) => ({
+      count: roomsWithPasskey.length,
+      rooms: roomsWithPasskey.map((room) => ({
         roomId: room.roomId,
         name: room.name,
         mode: room.mode,
@@ -83,7 +84,7 @@ export const getRooms = async (req, res) => {
         playerCount: room.players.length,
         maxPlayers: room.maxPlayers,
         status: room.status,
-        hasPasskey: !!room.passkey,
+        hasPasskey: !!room.passkey, // Now this will work correctly
         createdAt: room.createdAt,
       })),
     });

@@ -9,6 +9,51 @@ import logger from "../config/logger.js";
 const activeConnections = new Map();
 const roomTimers = new Map();
 
+// Helper function to start room deletion timer
+function startRoomTimer(io, roomId, timeoutMinutes, reason) {
+  // Clear existing timer if any
+  if (roomTimers.has(roomId)) {
+    clearTimeout(roomTimers.get(roomId));
+  }
+
+  const timer = setTimeout(async () => {
+    try {
+      const room = await Room.findOne({ roomId });
+      if (room) {
+        // Notify all players
+        io.to(roomId).emit("room_disbanded", {
+          reason,
+          message:
+            reason === "timeout_no_start"
+              ? "Room disbanded: Game not started within 15 minutes"
+              : "Room disbanded: Maximum room duration (30 minutes) reached",
+        });
+
+        // Remove all players from the room
+        await Room.deleteOne({ roomId });
+        roomTimers.delete(roomId);
+        logger.info(`Room ${roomId} auto-deleted: ${reason}`);
+      }
+    } catch (error) {
+      logger.error(`Failed to auto-delete room ${roomId}:`, error);
+    }
+  }, timeoutMinutes * 60 * 1000);
+
+  roomTimers.set(roomId, timer);
+  logger.info(
+    `Room timer started for ${roomId}: ${timeoutMinutes} minutes (${reason})`
+  );
+}
+
+// Helper function to clear room timer
+function clearRoomTimer(roomId) {
+  if (roomTimers.has(roomId)) {
+    clearTimeout(roomTimers.get(roomId));
+    roomTimers.delete(roomId);
+    logger.info(`Room timer cleared for ${roomId}`);
+  }
+}
+
 export const initializeSocket = (io) => {
   io.use(async (socket, next) => {
     try {
@@ -59,7 +104,14 @@ export const initializeSocket = (io) => {
           return socket.emit("error", { message: "Room not found" });
         }
 
-        if (room.passkey && passkey) {
+        // Check if room has a passkey
+        if (room.passkey) {
+          // Passkey is required - check if provided
+          if (!passkey) {
+            return socket.emit("error", { message: "Passkey required" });
+          }
+
+          // Validate the provided passkey
           const isValid = await room.comparePasskey(passkey);
           if (!isValid) {
             return socket.emit("error", { message: "Invalid passkey" });
@@ -88,6 +140,14 @@ export const initializeSocket = (io) => {
         io.to(roomId).emit("room_updated", sanitizedRoom);
 
         socket.emit("joined_room", { room: sanitizedRoom });
+
+        // Start timers for new rooms
+        if (!roomTimers.has(roomId)) {
+          // 15-minute timer for no game start
+          startRoomTimer(io, roomId, 15, "timeout_no_start");
+          // 30-minute absolute timer
+          startRoomTimer(io, roomId, 30, "max_duration");
+        }
 
         logger.info(`${socket.username} joined room ${roomId}`);
       } catch (error) {
@@ -136,6 +196,51 @@ export const initializeSocket = (io) => {
           room.status = "finished";
           await room.save();
 
+          // Complete Match document
+          if (room.gameState && room.gameState.matchId) {
+            try {
+              const match = await Match.findById(room.gameState.matchId);
+              if (match) {
+                const sortedPlayers = room.players
+                  .map((p) => ({
+                    ...p,
+                    finalScore: scores[p.userId.toString()] || 0,
+                  }))
+                  .sort((a, b) => b.finalScore - a.finalScore);
+
+                match.players = sortedPlayers.map((player, index) => ({
+                  userId: player.userId,
+                  username: player.username,
+                  displayName: player.displayName,
+                  finalScore: player.finalScore,
+                  placement: index + 1,
+                }));
+
+                match.winner = winnerId
+                  ? {
+                      userId: winnerId,
+                      username: winnerName,
+                      displayName: winnerName,
+                      finalScore: highestScore,
+                    }
+                  : null;
+
+                match.status = "abandoned";
+                match.endTime = new Date();
+                match.duration = Math.floor(
+                  (match.endTime - match.startTime) / 1000
+                );
+
+                await match.save();
+                logger.info(
+                  `Match ${match._id} marked as abandoned due to player leave`
+                );
+              }
+            } catch (matchErr) {
+              logger.error("Failed to save match on player leave:", matchErr);
+            }
+          }
+
           // Notify all players that game ended
           io.to(roomId).emit("game_finished", {
             reason: "player_left",
@@ -155,13 +260,26 @@ export const initializeSocket = (io) => {
           );
         }
 
+        // Check if leaving player is the host
+        const isHost = room.host.toString() === socket.userId;
+
         await room.removePlayer(socket.userId);
 
         socket.leave(roomId);
         socket.currentRoom = null;
 
-        if (room.players.length === 0) {
+        if (isHost && room.players.length > 0) {
+          // Host left - disband the room
+          io.to(roomId).emit("room_disbanded", {
+            reason: "host_left",
+            message: "Room disbanded: Host has left the game",
+          });
           await Room.deleteOne({ roomId });
+          clearRoomTimer(roomId);
+          logger.info(`Room ${roomId} disbanded because host left`);
+        } else if (room.players.length === 0) {
+          await Room.deleteOne({ roomId });
+          clearRoomTimer(roomId);
           logger.info(`Room ${roomId} deleted (empty)`);
         } else {
           const updatedRoom = await Room.findOne({ roomId }).select("-passkey");
@@ -248,6 +366,12 @@ export const initializeSocket = (io) => {
         // Update room status
         room.status = "playing";
         room.currentRound = 1;
+        room.gameStartedAt = new Date();
+
+        // Clear the 15-minute "no start" timer since game has started
+        // Keep the 30-minute max duration timer running
+        clearRoomTimer(roomId);
+        startRoomTimer(io, roomId, 30, "max_duration");
 
         // Initialize scores
         if (!room.gameState) {
@@ -265,6 +389,26 @@ export const initializeSocket = (io) => {
         const shufflePlayer = room.players[randomPlayerIndex];
         const shufflerIdString = shufflePlayer.userId.toString();
         room.gameState.currentShuffler = shufflerIdString;
+
+        // Create Match document for history tracking
+        const match = new Match({
+          roomId: room.roomId,
+          mode: room.mode,
+          players: room.players.map((p) => ({
+            userId: p.userId,
+            username: p.username,
+            displayName: p.displayName,
+            finalScore: 0,
+            placement: 0,
+          })),
+          rounds: [],
+          status: "in-progress",
+          startTime: new Date(),
+        });
+        await match.save();
+
+        // Store matchId in room for reference
+        room.gameState.matchId = match._id.toString();
 
         // Save everything at once
         await room.save();
@@ -458,6 +602,51 @@ export const initializeSocket = (io) => {
 
         await room.save();
 
+        // Save round data to Match document
+        if (room.gameState.matchId) {
+          try {
+            const match = await Match.findById(room.gameState.matchId);
+            if (match) {
+              const sipahiPlayer = room.players.find(
+                (p) => p.userId.toString() === socket.userId
+              );
+              const chorPlayer = room.players.find(
+                (p) => p.userId.toString() === actualChorUserId
+              );
+              const guessedPlayerData = room.players.find(
+                (p) => p.userId.toString() === guessedUserId
+              );
+
+              match.rounds.push({
+                roundNumber: room.currentRound,
+                roles: room.gameState.roles,
+                sipahi: {
+                  userId: socket.userId,
+                  username: socket.username,
+                },
+                chor: {
+                  userId: actualChorUserId,
+                  username: chorPlayer.username,
+                },
+                guessedPlayer: {
+                  userId: guessedUserId,
+                  username: guessedPlayerData.username,
+                },
+                correctGuess: isCorrect,
+                roundScores: pointsDistribution,
+                startTime: new Date(),
+                endTime: new Date(),
+              });
+              await match.save();
+              logger.info(
+                `Round ${room.currentRound} data saved to match ${match._id}`
+              );
+            }
+          } catch (matchErr) {
+            logger.error("Failed to save round data to match:", matchErr);
+          }
+        }
+
         logger.info(`Points distribution for round:`, pointsDistribution);
         logger.info(`Total scores after round:`, room.gameState.scores);
 
@@ -551,6 +740,53 @@ export const initializeSocket = (io) => {
               const winner = updatedRoom.players.find(
                 (p) => p.userId.toString() === winnerId
               );
+
+              // Complete Match document
+              if (updatedRoom.gameState.matchId) {
+                try {
+                  const match = await Match.findById(
+                    updatedRoom.gameState.matchId
+                  );
+                  if (match) {
+                    // Update players with final scores and placements
+                    const sortedPlayers = updatedRoom.players
+                      .map((p) => ({
+                        ...p,
+                        finalScore:
+                          updatedRoom.gameState.scores[p.userId.toString()] ||
+                          0,
+                      }))
+                      .sort((a, b) => b.finalScore - a.finalScore);
+
+                    match.players = sortedPlayers.map((player, index) => ({
+                      userId: player.userId,
+                      username: player.username,
+                      displayName: player.displayName,
+                      finalScore: player.finalScore,
+                      placement: index + 1,
+                    }));
+
+                    match.winner = {
+                      userId: winnerId,
+                      username: winner.username,
+                      displayName: winner.displayName,
+                      finalScore: maxScore,
+                    };
+                    match.status = "completed";
+                    match.endTime = new Date();
+                    match.duration = Math.floor(
+                      (match.endTime - match.startTime) / 1000
+                    );
+
+                    await match.save();
+                    logger.info(
+                      `Match ${match._id} completed and saved to history`
+                    );
+                  }
+                } catch (matchErr) {
+                  logger.error("Failed to complete match document:", matchErr);
+                }
+              }
 
               // Update leaderboard stats for all players
               for (const player of updatedRoom.players) {
@@ -745,6 +981,51 @@ export const initializeSocket = (io) => {
               room.status = "finished";
               await room.save();
 
+              // Complete Match document
+              if (room.gameState && room.gameState.matchId) {
+                try {
+                  const match = await Match.findById(room.gameState.matchId);
+                  if (match) {
+                    const sortedPlayers = room.players
+                      .map((p) => ({
+                        ...p,
+                        finalScore: scores[p.userId.toString()] || 0,
+                      }))
+                      .sort((a, b) => b.finalScore - a.finalScore);
+
+                    match.players = sortedPlayers.map((player, index) => ({
+                      userId: player.userId,
+                      username: player.username,
+                      displayName: player.displayName,
+                      finalScore: player.finalScore,
+                      placement: index + 1,
+                    }));
+
+                    match.winner = winnerId
+                      ? {
+                          userId: winnerId,
+                          username: winnerName,
+                          displayName: winnerName,
+                          finalScore: highestScore,
+                        }
+                      : null;
+
+                    match.status = "abandoned";
+                    match.endTime = new Date();
+                    match.duration = Math.floor(
+                      (match.endTime - match.startTime) / 1000
+                    );
+
+                    await match.save();
+                    logger.info(
+                      `Match ${match._id} marked as abandoned due to disconnect`
+                    );
+                  }
+                } catch (matchErr) {
+                  logger.error("Failed to save match on disconnect:", matchErr);
+                }
+              }
+
               // Notify all players that game ended
               io.to(socket.currentRoom).emit("game_finished", {
                 reason: "player_disconnected",
@@ -768,12 +1049,33 @@ export const initializeSocket = (io) => {
 
             if (room.players.length === 0) {
               await Room.deleteOne({ roomId: socket.currentRoom });
-              logger.info(`Room ${socket.currentRoom} deleted (empty)`);
+              clearRoomTimer(socket.currentRoom);
+              logger.info(
+                `Room ${socket.currentRoom} deleted (empty after disconnect)`
+              );
             } else {
-              const updatedRoom = await Room.findOne({
-                roomId: socket.currentRoom,
-              }).select("-passkey");
-              io.to(socket.currentRoom).emit("room_updated", updatedRoom);
+              // Check if disconnected player was the host
+              const isHost = room.host.toString() === socket.userId;
+
+              if (isHost) {
+                // Host disconnected - disband room
+                io.to(socket.currentRoom).emit("room_disbanded", {
+                  reason: "host_disconnected",
+                  message: "Room disbanded: Host has disconnected",
+                });
+                await Room.deleteOne({ roomId: socket.currentRoom });
+                clearRoomTimer(socket.currentRoom);
+                logger.info(
+                  `Room ${socket.currentRoom} disbanded because host disconnected`
+                );
+              } else {
+                const updatedRoom = await Room.findOne({
+                  roomId: socket.currentRoom,
+                }).select("-passkey");
+                if (updatedRoom) {
+                  io.to(socket.currentRoom).emit("room_updated", updatedRoom);
+                }
+              }
             }
           }
         }
@@ -904,6 +1206,7 @@ async function endGame(io, roomId) {
 
     setTimeout(async () => {
       await Room.deleteOne({ roomId });
+      clearRoomTimer(roomId);
       logger.info(`Room ${roomId} deleted after game completion`);
     }, 30000);
   } catch (error) {

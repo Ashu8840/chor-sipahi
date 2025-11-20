@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import Navbar from "../components/Navbar";
 import FloatingChat from "../components/FloatingChat";
+import VideoGrid from "../components/VideoGrid";
 import Loading from "../components/Loading";
 import { roomAPI } from "../services/api";
 import socketService from "../services/socket";
@@ -66,6 +67,12 @@ export default function GamePanel() {
     toast.error(data.message);
   };
 
+  const handleRoomDisbanded = (data) => {
+    console.log("Room disbanded:", data);
+    toast.error(data.message || "Room has been disbanded");
+    navigate("/lobby");
+  };
+
   useEffect(() => {
     console.log("GamePanel mounted with state:", location.state);
     console.log(
@@ -90,6 +97,7 @@ export default function GamePanel() {
     socketService.on("guess_result", handleGuessResult);
     socketService.on("next_round", handleNextRound);
     socketService.on("game_finished", handleGameFinished);
+    socketService.on("room_disbanded", handleRoomDisbanded);
     socketService.on("error", handleError);
 
     return () => {
@@ -100,6 +108,7 @@ export default function GamePanel() {
       socketService.off("guess_result", handleGuessResult);
       socketService.off("next_round", handleNextRound);
       socketService.off("game_finished", handleGameFinished);
+      socketService.off("room_disbanded", handleRoomDisbanded);
       socketService.off("error", handleError);
       // Don't leave room when GamePanel unmounts - user might be going back to lobby
     };
@@ -310,6 +319,7 @@ export default function GamePanel() {
 
   const handleLeaveRoom = async () => {
     try {
+      // Note: VideoGrid component will cleanup automatically on unmount
       await roomAPI.leaveRoom(roomId);
       socketService.leaveRoom(roomId);
       navigate("/lobby");
@@ -765,6 +775,15 @@ export default function GamePanel() {
           </div>
         </div>
       </div>
+
+      {/* Video Grid for video mode */}
+      {currentRoom?.mode === "video" && (
+        <VideoGrid
+          roomId={roomId}
+          players={currentRoom.players}
+          currentUserId={user._id}
+        />
+      )}
 
       {/* Floating Chat */}
       <FloatingChat roomId={roomId} />

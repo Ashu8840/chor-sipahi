@@ -16,6 +16,7 @@ import {
 import Navbar from "../components/Navbar";
 import Loading from "../components/Loading";
 import FloatingChat from "../components/FloatingChat";
+import VideoGrid from "../components/VideoGrid";
 import { roomAPI } from "../services/api";
 import socketService from "../services/socket";
 import { useGameStore } from "../context/gameStore";
@@ -58,6 +59,12 @@ export default function GameRoom() {
     toast.error(data.message);
   };
 
+  const handleRoomDisbanded = (data) => {
+    console.log("Room disbanded:", data);
+    toast.error(data.message || "Room has been disbanded");
+    navigate("/lobby");
+  };
+
   useEffect(() => {
     fetchRoomData();
     socketService.joinRoom(roomId);
@@ -70,6 +77,7 @@ export default function GameRoom() {
     socketService.on("guess_result", handleGuessResult);
     socketService.on("next_round", handleNextRound);
     socketService.on("game_finished", handleGameFinished);
+    socketService.on("room_disbanded", handleRoomDisbanded);
     socketService.on("error", handleError);
 
     return () => {
@@ -81,6 +89,7 @@ export default function GameRoom() {
       socketService.off("guess_result", handleGuessResult);
       socketService.off("next_round", handleNextRound);
       socketService.off("game_finished", handleGameFinished);
+      socketService.off("room_disbanded", handleRoomDisbanded);
       socketService.off("error", handleError);
 
       // Don't emit can_start_game cleanup
@@ -203,6 +212,7 @@ export default function GameRoom() {
 
   const handleLeaveRoom = async () => {
     try {
+      // Note: VideoGrid component will cleanup automatically on unmount
       await roomAPI.leaveRoom(roomId);
       socketService.leaveRoom(roomId);
       navigate("/lobby");
@@ -598,6 +608,15 @@ export default function GameRoom() {
           </div>
         </motion.div>
       </div>
+
+      {/* Video Grid for video mode */}
+      {currentRoom?.mode === "video" && (
+        <VideoGrid
+          roomId={roomId}
+          players={currentRoom.players}
+          currentUserId={user._id}
+        />
+      )}
 
       {/* Floating Chat */}
       <FloatingChat roomId={roomId} />

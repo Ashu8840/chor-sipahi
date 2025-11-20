@@ -22,6 +22,7 @@ export default function Lobby() {
   const [rooms, setRooms] = useState([]);
   const [loading, setLoading] = useState(true);
   const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [initialMode, setInitialMode] = useState("chat");
   const [joinModalOpen, setJoinModalOpen] = useState(false);
   const [selectedRoom, setSelectedRoom] = useState(null);
   const [searchMode, setSearchMode] = useState("all");
@@ -73,9 +74,9 @@ export default function Lobby() {
   };
 
   const handleQuickMatch = (mode) => {
-    setIsMatchmaking(true);
-    setMatchmakingMode(mode);
-    socketService.joinMatchmaking(mode);
+    // Set the initial mode based on which button was clicked
+    setInitialMode(mode === "random" ? "chat" : "video");
+    setCreateModalOpen(true);
   };
 
   const handleCancelMatchmaking = () => {
@@ -100,7 +101,25 @@ export default function Lobby() {
       setCurrentRoom(response.data.room);
       navigate(`/room/${roomId}`);
     } catch (error) {
-      toast.error(error.response?.data?.message || "Failed to join room");
+      const errorMessage =
+        error.response?.data?.message || "Failed to join room";
+
+      // If passkey is required, open the password modal
+      if (
+        errorMessage.includes("Passkey required") ||
+        errorMessage.includes("Invalid passkey")
+      ) {
+        const room = rooms.find((r) => r.roomId === roomId);
+        if (room) {
+          setSelectedRoom(room);
+          setJoinModalOpen(true);
+          toast.error(errorMessage);
+        } else {
+          toast.error(errorMessage);
+        }
+      } else {
+        toast.error(errorMessage);
+      }
     }
   };
 
@@ -245,8 +264,13 @@ export default function Lobby() {
                       </div>
                       <div className="flex items-center justify-between">
                         <span>Mode:</span>
-                        <span className="text-white capitalize">
-                          {room.mode}
+                        <span className="text-white capitalize flex items-center space-x-1">
+                          {room.mode === "video" ? (
+                            <Video className="w-4 h-4 text-primary-500" />
+                          ) : (
+                            <MessageSquare className="w-4 h-4 text-gray-500" />
+                          )}
+                          <span>{room.mode}</span>
                         </span>
                       </div>
                       <div className="flex items-center justify-between">
@@ -275,6 +299,7 @@ export default function Lobby() {
       <CreateRoomModal
         isOpen={createModalOpen}
         onClose={() => setCreateModalOpen(false)}
+        initialMode={initialMode}
         onSuccess={(roomId) => {
           setCreateModalOpen(false);
           navigate(`/room/${roomId}`);
@@ -294,15 +319,20 @@ export default function Lobby() {
   );
 }
 
-function CreateRoomModal({ isOpen, onClose, onSuccess }) {
+function CreateRoomModal({ isOpen, onClose, onSuccess, initialMode = "chat" }) {
   const [formData, setFormData] = useState({
     name: "",
-    mode: "chat",
+    mode: initialMode,
     isPublic: true,
     passkey: "",
   });
   const [loading, setLoading] = useState(false);
   const { setCurrentRoom } = useGameStore();
+
+  // Update mode when initialMode prop changes
+  useEffect(() => {
+    setFormData((prev) => ({ ...prev, mode: initialMode }));
+  }, [initialMode]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();

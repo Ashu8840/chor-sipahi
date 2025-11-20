@@ -35,10 +35,21 @@ Chor-Sipahi (Thief-Police) is a beloved Indian game that combines mystery, excit
 
 ### 🎲 Game Modes
 
-- **Quick Match**: Instant matchmaking with random players
+- **Random Chat Match**: Instant text-based gameplay with quick room creation
+- **Video Room Match**: Create video-enabled rooms where all 4 players can see each other via webcam
 - **Private Rooms**: Create password-protected rooms for friends
 - **Public Rooms**: Join open rooms with available slots
-- **Video Rooms**: Game rooms with optional video chat (WebRTC)
+
+### 📹 Video Call Feature (New!)
+
+When you create or join a **Video Room**, the game includes live video streaming:
+
+- **4 Camera Windows**: Each player's webcam appears in a corner of the screen
+- **In-Game Controls**: Mute/unmute microphone and enable/disable camera during gameplay
+- **WebRTC Technology**: Peer-to-peer video connections for low latency
+- **Full Game Integration**: Video windows stay visible in both lobby and game screens
+
+**Note**: Your browser will request camera and microphone permissions when joining a video room.
 
 ### 📊 Statistics & Rankings
 
