@@ -33,25 +33,46 @@ export default function VideoGrid({ roomId, players, currentUserId }) {
     };
   }, [roomId]);
 
-  // Cleanup when players list changes (someone left)
+  // Initialize peer connections when players change
   useEffect(() => {
-    return () => {
-      // Stop streams for players who are no longer in the room
+    if (localStream && players.length > 0) {
+      console.log("Players changed, updating peer connections...");
+
+      // Get current player IDs
       const currentPlayerIds = new Set(players.map((p) => p.userId));
-      Object.keys(remoteStreams).forEach((userId) => {
+
+      // Remove connections for players who left
+      Object.keys(peerConnections.current).forEach((userId) => {
         if (!currentPlayerIds.has(userId)) {
-          const stream = remoteStreams[userId];
-          if (stream) {
-            stream.getTracks().forEach((track) => track.stop());
-          }
+          console.log(`Removing peer connection for ${userId}`);
           if (peerConnections.current[userId]) {
             peerConnections.current[userId].close();
             delete peerConnections.current[userId];
           }
+          // Remove remote stream
+          setRemoteStreams((prev) => {
+            const newStreams = { ...prev };
+            if (newStreams[userId]) {
+              newStreams[userId].getTracks().forEach((track) => track.stop());
+              delete newStreams[userId];
+            }
+            return newStreams;
+          });
         }
       });
-    };
-  }, [players.length]);
+
+      // Create connections for new players
+      players.forEach((player) => {
+        if (
+          player.userId !== currentUserId &&
+          !peerConnections.current[player.userId]
+        ) {
+          console.log(`Creating peer connection for ${player.userId}`);
+          createPeerConnection(player.userId, localStream);
+        }
+      });
+    }
+  }, [players, localStream, currentUserId]);
 
   const initializeMedia = async () => {
     try {
@@ -65,12 +86,7 @@ export default function VideoGrid({ roomId, players, currentUserId }) {
         localVideoRef.current.srcObject = stream;
       }
 
-      // Create peer connections for all other players
-      players.forEach((player) => {
-        if (player.userId !== currentUserId) {
-          createPeerConnection(player.userId, stream);
-        }
-      });
+      console.log("Local media initialized successfully");
     } catch (error) {
       console.error("Error accessing media devices:", error);
       if (error.name === "NotAllowedError") {
@@ -92,28 +108,54 @@ export default function VideoGrid({ roomId, players, currentUserId }) {
       iceServers: [
         { urls: "stun:stun.l.google.com:19302" },
         { urls: "stun:stun1.l.google.com:19302" },
+        { urls: "stun:stun2.l.google.com:19302" },
       ],
     };
 
     const peerConnection = new RTCPeerConnection(configuration);
     peerConnections.current[targetUserId] = peerConnection;
 
+    console.log(`Creating peer connection for ${targetUserId}`);
+
     // Add local stream tracks to peer connection
     stream.getTracks().forEach((track) => {
       peerConnection.addTrack(track, stream);
+      console.log(
+        `Added ${track.kind} track to peer connection for ${targetUserId}`
+      );
     });
 
     // Handle incoming tracks
     peerConnection.ontrack = (event) => {
+      console.log(
+        `Received ${event.track.kind} track from ${targetUserId}`,
+        event.streams[0]
+      );
       setRemoteStreams((prev) => ({
         ...prev,
         [targetUserId]: event.streams[0],
       }));
     };
 
+    // Monitor connection state
+    peerConnection.onconnectionstatechange = () => {
+      console.log(
+        `Peer connection state with ${targetUserId}:`,
+        peerConnection.connectionState
+      );
+    };
+
+    peerConnection.oniceconnectionstatechange = () => {
+      console.log(
+        `ICE connection state with ${targetUserId}:`,
+        peerConnection.iceConnectionState
+      );
+    };
+
     // Handle ICE candidates
     peerConnection.onicecandidate = (event) => {
       if (event.candidate) {
+        console.log(`Sending ICE candidate to ${targetUserId}`);
         socketService.emit("webrtc_signal", {
           roomId,
           targetUserId,
@@ -126,17 +168,22 @@ export default function VideoGrid({ roomId, players, currentUserId }) {
     };
 
     // Create and send offer
-    const offer = await peerConnection.createOffer();
-    await peerConnection.setLocalDescription(offer);
+    try {
+      const offer = await peerConnection.createOffer();
+      await peerConnection.setLocalDescription(offer);
 
-    socketService.emit("webrtc_signal", {
-      roomId,
-      targetUserId,
-      signal: {
-        type: "offer",
-        offer: offer,
-      },
-    });
+      console.log(`Sending offer to ${targetUserId}`);
+      socketService.emit("webrtc_signal", {
+        roomId,
+        targetUserId,
+        signal: {
+          type: "offer",
+          offer: offer,
+        },
+      });
+    } catch (error) {
+      console.error(`Error creating offer for ${targetUserId}:`, error);
+    }
   };
 
   const handleSignal = async ({ fromUserId, signal }) => {
@@ -150,12 +197,20 @@ export default function VideoGrid({ roomId, players, currentUserId }) {
   };
 
   const handleOffer = async (fromUserId, offer) => {
-    if (!localStream) return;
+    if (!localStream) {
+      console.log(
+        `Cannot handle offer from ${fromUserId} - no local stream yet`
+      );
+      return;
+    }
+
+    console.log(`Handling offer from ${fromUserId}`);
 
     const peerConnection = new RTCPeerConnection({
       iceServers: [
         { urls: "stun:stun.l.google.com:19302" },
         { urls: "stun:stun1.l.google.com:19302" },
+        { urls: "stun:stun2.l.google.com:19302" },
       ],
     });
 
@@ -163,17 +218,40 @@ export default function VideoGrid({ roomId, players, currentUserId }) {
 
     localStream.getTracks().forEach((track) => {
       peerConnection.addTrack(track, localStream);
+      console.log(
+        `Added ${track.kind} track to peer connection for ${fromUserId}`
+      );
     });
 
     peerConnection.ontrack = (event) => {
+      console.log(
+        `Received ${event.track.kind} track from ${fromUserId}`,
+        event.streams[0]
+      );
       setRemoteStreams((prev) => ({
         ...prev,
         [fromUserId]: event.streams[0],
       }));
     };
 
+    // Monitor connection state
+    peerConnection.onconnectionstatechange = () => {
+      console.log(
+        `Peer connection state with ${fromUserId}:`,
+        peerConnection.connectionState
+      );
+    };
+
+    peerConnection.oniceconnectionstatechange = () => {
+      console.log(
+        `ICE connection state with ${fromUserId}:`,
+        peerConnection.iceConnectionState
+      );
+    };
+
     peerConnection.onicecandidate = (event) => {
       if (event.candidate) {
+        console.log(`Sending ICE candidate to ${fromUserId}`);
         socketService.emit("webrtc_signal", {
           roomId,
           targetUserId: fromUserId,
@@ -185,18 +263,25 @@ export default function VideoGrid({ roomId, players, currentUserId }) {
       }
     };
 
-    await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
-    const answer = await peerConnection.createAnswer();
-    await peerConnection.setLocalDescription(answer);
+    try {
+      await peerConnection.setRemoteDescription(
+        new RTCSessionDescription(offer)
+      );
+      const answer = await peerConnection.createAnswer();
+      await peerConnection.setLocalDescription(answer);
 
-    socketService.emit("webrtc_signal", {
-      roomId,
-      targetUserId: fromUserId,
-      signal: {
-        type: "answer",
-        answer: answer,
-      },
-    });
+      console.log(`Sending answer to ${fromUserId}`);
+      socketService.emit("webrtc_signal", {
+        roomId,
+        targetUserId: fromUserId,
+        signal: {
+          type: "answer",
+          answer: answer,
+        },
+      });
+    } catch (error) {
+      console.error(`Error handling offer from ${fromUserId}:`, error);
+    }
   };
 
   const handleAnswer = async (fromUserId, answer) => {
@@ -281,29 +366,44 @@ export default function VideoGrid({ roomId, players, currentUserId }) {
   ];
 
   return (
-    <div className="fixed inset-0 pointer-events-none z-40">
-      {players.map((player, index) => {
-        const isCurrentUser = player.userId === currentUserId;
-        const stream = isCurrentUser
-          ? localStream
-          : remoteStreams[player.userId];
-        const name = isCurrentUser ? "You" : getPlayerName(player.userId);
+    <div className="fixed inset-0 pointer-events-none z-40 overflow-auto md:overflow-hidden">
+      <div className="min-h-full md:h-full relative">
+        {players.map((player, index) => {
+          const isCurrentUser = player.userId === currentUserId;
+          const stream = isCurrentUser
+            ? localStream
+            : remoteStreams[player.userId];
+          const name = isCurrentUser ? "You" : getPlayerName(player.userId);
 
-        return (
-          <DraggableVideoPlayer
-            key={player.userId}
-            stream={stream}
-            name={name}
-            isMuted={isCurrentUser} // Mute own audio to prevent feedback
-            isLocal={isCurrentUser}
-            audioEnabled={audioEnabled}
-            videoEnabled={videoEnabled}
-            onToggleAudio={isCurrentUser ? toggleAudio : undefined}
-            onToggleVideo={isCurrentUser ? toggleVideo : undefined}
-            initialPosition={positions[index] || positions[0]}
-          />
-        );
-      })}
+          console.log(`Player ${name} (${player.userId}):`, {
+            isCurrentUser,
+            hasStream: !!stream,
+            streamActive: stream?.active,
+            tracks: stream
+              ?.getTracks()
+              .map((t) => ({
+                kind: t.kind,
+                enabled: t.enabled,
+                readyState: t.readyState,
+              })),
+          });
+
+          return (
+            <DraggableVideoPlayer
+              key={player.userId}
+              stream={stream}
+              name={name}
+              isMuted={isCurrentUser} // Mute own audio to prevent feedback
+              isLocal={isCurrentUser}
+              audioEnabled={audioEnabled}
+              videoEnabled={videoEnabled}
+              onToggleAudio={isCurrentUser ? toggleAudio : undefined}
+              onToggleVideo={isCurrentUser ? toggleVideo : undefined}
+              initialPosition={positions[index] || positions[0]}
+            />
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -335,6 +435,18 @@ function DraggableVideoPlayer({
     };
   };
 
+  const handleTouchStart = (e) => {
+    if (e.target.closest(".video-controls")) return; // Don't drag when clicking controls
+
+    setIsDragging(true);
+    const touch = e.touches[0];
+    const rect = dragRef.current.getBoundingClientRect();
+    offsetRef.current = {
+      x: touch.clientX - rect.left,
+      y: touch.clientY - rect.top,
+    };
+  };
+
   const handleMouseMove = (e) => {
     if (!isDragging) return;
 
@@ -361,7 +473,38 @@ function DraggableVideoPlayer({
     setPosition((prev) => ({ ...prev, ...newPosition }));
   };
 
+  const handleTouchMove = (e) => {
+    if (!isDragging) return;
+
+    const touch = e.touches[0];
+    const newPosition = {};
+
+    // Calculate new position
+    const newX = touch.clientX - offsetRef.current.x;
+    const newY = touch.clientY - offsetRef.current.y;
+
+    // Boundary checks
+    const maxX = window.innerWidth - 200; // 200 is video width
+    const maxY = window.innerHeight - 150; // 150 is video height
+
+    if (newX >= 0 && newX <= maxX) {
+      newPosition.left = newX;
+      delete newPosition.right;
+    }
+
+    if (newY >= 0 && newY <= maxY) {
+      newPosition.top = newY;
+      delete newPosition.bottom;
+    }
+
+    setPosition((prev) => ({ ...prev, ...newPosition }));
+  };
+
   const handleMouseUp = () => {
+    setIsDragging(false);
+  };
+
+  const handleTouchEnd = () => {
     setIsDragging(false);
   };
 
@@ -369,14 +512,20 @@ function DraggableVideoPlayer({
     if (isDragging) {
       window.addEventListener("mousemove", handleMouseMove);
       window.addEventListener("mouseup", handleMouseUp);
+      window.addEventListener("touchmove", handleTouchMove);
+      window.addEventListener("touchend", handleTouchEnd);
     } else {
       window.removeEventListener("mousemove", handleMouseMove);
       window.removeEventListener("mouseup", handleMouseUp);
+      window.removeEventListener("touchmove", handleTouchMove);
+      window.removeEventListener("touchend", handleTouchEnd);
     }
 
     return () => {
       window.removeEventListener("mousemove", handleMouseMove);
       window.removeEventListener("mouseup", handleMouseUp);
+      window.removeEventListener("touchmove", handleTouchMove);
+      window.removeEventListener("touchend", handleTouchEnd);
     };
   }, [isDragging]);
 
@@ -387,6 +536,7 @@ function DraggableVideoPlayer({
     ...(position.left !== undefined && { left: `${position.left}px` }),
     ...(position.right !== undefined && { right: `${position.right}px` }),
     cursor: isDragging ? "grabbing" : "grab",
+    touchAction: "none", // Prevent default touch actions
   };
 
   return (
@@ -396,6 +546,7 @@ function DraggableVideoPlayer({
       animate={{ opacity: 1, scale: 1 }}
       style={positionStyle}
       onMouseDown={handleMouseDown}
+      onTouchStart={handleTouchStart}
       className="pointer-events-auto"
     >
       <VideoPlayer
@@ -449,13 +600,13 @@ function VideoPlayer({
         </div>
       )}
 
-      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-2">
+      <div className="absolute bottom-0 left-0 right-0 bg-linear-to-t from-black/80 to-transparent p-2">
         <div className="flex items-center justify-between">
           <p className="text-xs font-semibold text-white truncate flex-1">
             {name}
           </p>
           <Move
-            className="w-3 h-3 text-gray-400 ml-1 flex-shrink-0"
+            className="w-3 h-3 text-gray-400 ml-1 shrink-0"
             title="Drag to move"
           />
         </div>
