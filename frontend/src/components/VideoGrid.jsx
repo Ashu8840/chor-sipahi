@@ -659,50 +659,74 @@ function VideoPlayer({
           <p className="text-xs font-semibold text-white truncate flex-1">
             {name}
           </p>
-          <div className="flex items-center gap-1">
-            {isMuted && (
-              <MicOff className="w-3 h-3 text-red-400" title="Muted" />
-            )}
-            <Move
-              className="w-3 h-3 text-gray-400 shrink-0"
-              title="Drag to move"
-            />
-          </div>
+          <Move
+            className="w-3 h-3 text-gray-400 ml-1 shrink-0"
+            title="Drag to move"
+          />
         </div>
       </div>
 
-      {isLocal && (
-        <div className="absolute top-2 right-2 flex space-x-1 video-controls">
-          <button
-            onClick={onToggleAudio}
-            className={`p-1.5 rounded-full ${
-              audioEnabled
-                ? "bg-gray-700 hover:bg-gray-600"
-                : "bg-red-600 hover:bg-red-500"
-            }`}
-          >
-            {audioEnabled ? (
-              <Mic className="w-3 h-3 text-white" />
-            ) : (
-              <MicOff className="w-3 h-3 text-white" />
-            )}
-          </button>
-          <button
-            onClick={onToggleVideo}
-            className={`p-1.5 rounded-full ${
-              videoEnabled
-                ? "bg-gray-700 hover:bg-gray-600"
-                : "bg-red-600 hover:bg-red-500"
-            }`}
-          >
-            {videoEnabled ? (
-              <Video className="w-3 h-3 text-white" />
-            ) : (
-              <VideoOff className="w-3 h-3 text-white" />
-            )}
-          </button>
-        </div>
-      )}
+      {/* Show controls for local user, show status indicators for remote users */}
+      <div className="absolute top-2 right-2 flex space-x-1 video-controls">
+        {isLocal ? (
+          <>
+            <button
+              onClick={onToggleAudio}
+              className={`p-1.5 rounded-full ${
+                audioEnabled
+                  ? "bg-gray-700 hover:bg-gray-600"
+                  : "bg-red-600 hover:bg-red-500"
+              }`}
+              title={audioEnabled ? "Mute microphone" : "Unmute microphone"}
+            >
+              {audioEnabled ? (
+                <Mic className="w-3 h-3 text-white" />
+              ) : (
+                <MicOff className="w-3 h-3 text-white" />
+              )}
+            </button>
+            <button
+              onClick={onToggleVideo}
+              className={`p-1.5 rounded-full ${
+                videoEnabled
+                  ? "bg-gray-700 hover:bg-gray-600"
+                  : "bg-red-600 hover:bg-red-500"
+              }`}
+              title={videoEnabled ? "Turn off camera" : "Turn on camera"}
+            >
+              {videoEnabled ? (
+                <Video className="w-3 h-3 text-white" />
+              ) : (
+                <VideoOff className="w-3 h-3 text-white" />
+              )}
+            </button>
+          </>
+        ) : (
+          /* Status indicators for remote streams */
+          <>
+            <div
+              className="p-1.5 rounded-full bg-gray-700/50"
+              title="Remote audio (controlled by user)"
+            >
+              {stream?.getAudioTracks()[0]?.enabled ? (
+                <Mic className="w-3 h-3 text-green-400" />
+              ) : (
+                <MicOff className="w-3 h-3 text-red-400" />
+              )}
+            </div>
+            <div
+              className="p-1.5 rounded-full bg-gray-700/50"
+              title="Remote video (controlled by user)"
+            >
+              {stream?.getVideoTracks()[0]?.enabled ? (
+                <Video className="w-3 h-3 text-green-400" />
+              ) : (
+                <VideoOff className="w-3 h-3 text-red-400" />
+              )}
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 }
