@@ -57,6 +57,8 @@ export default function GamePanel() {
   const [currentRound, setCurrentRound] = useState(location.state?.round || 1);
   const [roundResult, setRoundResult] = useState(null);
   const [showRoleCard, setShowRoleCard] = useState(false);
+  const [showShuffleCard, setShowShuffleCard] = useState(false);
+  const [showGuessCard, setShowGuessCard] = useState(false);
   const [winner, setWinner] = useState(null);
 
   const { user } = useAuthStore();
@@ -205,6 +207,12 @@ export default function GamePanel() {
     setGameState("shuffling");
     setShufflerUserId(shuffler);
     setCurrentRound(round);
+
+    // Show shuffle card if this user is the shuffler
+    if (shuffler === user._id) {
+      setShowShuffleCard(true);
+    }
+
     toast.success(`${shufflerName} will shuffle the roles!`);
   };
 
@@ -213,6 +221,13 @@ export default function GamePanel() {
     setIsSipahi(sipahi);
     setShowRoleCard(true);
     setGameState("playing");
+
+    // Show guess card for Sipahi after role card disappears
+    if (sipahi) {
+      setTimeout(() => {
+        setShowGuessCard(true);
+      }, 3000);
+    }
 
     setTimeout(() => setShowRoleCard(false), 3000);
   };
@@ -311,10 +326,12 @@ export default function GamePanel() {
       roomId
     );
     socketService.emit("shuffle_roles", { roomId });
+    setShowShuffleCard(false);
   };
 
   const handleGuess = (guessedUserId) => {
     socketService.emit("guess_chor", { roomId, guessedUserId });
+    setShowGuessCard(false);
   };
 
   const handleLeaveRoom = async () => {
@@ -459,8 +476,115 @@ export default function GamePanel() {
               )}
             </AnimatePresence>
 
-            {/* Shuffle Button */}
-            {gameState === "shuffling" && amIShuffler && (
+            {/* Shuffle Card - Fullscreen Modal */}
+            <AnimatePresence>
+              {showShuffleCard && amIShuffler && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50"
+                  onClick={(e) => e.target === e.currentTarget && null}
+                >
+                  <motion.div
+                    initial={{ scale: 0.8, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    exit={{ scale: 0.8, opacity: 0 }}
+                    transition={{ delay: 0.1 }}
+                    className="relative w-96 h-96 bg-linear-to-br from-purple-600 to-pink-600 rounded-3xl shadow-2xl p-1"
+                  >
+                    <div className="w-full h-full bg-gray-900 rounded-3xl flex flex-col items-center justify-center space-y-6 p-8">
+                      <Sparkles className="w-32 h-32 text-purple-400 animate-pulse" />
+                      <h2 className="text-4xl font-bold text-white text-center">
+                        You are the Shuffler!
+                      </h2>
+                      <p className="text-center text-gray-300 text-lg">
+                        Click the button to shuffle and assign roles to all
+                        players
+                      </p>
+                      <motion.button
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                        onClick={handleShuffle}
+                        className="btn-primary flex items-center space-x-3 text-xl px-8 py-4 bg-linear-to-r from-purple-600 to-pink-600"
+                      >
+                        <Shuffle className="w-6 h-6" />
+                        <span>Shuffle Roles</span>
+                      </motion.button>
+                    </div>
+                  </motion.div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Guess Card - Fullscreen Modal for Sipahi */}
+            <AnimatePresence>
+              {showGuessCard &&
+                isSipahi &&
+                gameState === "playing" &&
+                !roundResult && (
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50"
+                    onClick={(e) => e.target === e.currentTarget && null}
+                  >
+                    <motion.div
+                      initial={{ scale: 0.8, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      exit={{ scale: 0.8, opacity: 0 }}
+                      transition={{ delay: 0.1 }}
+                      className="relative w-[500px] bg-linear-to-br from-green-600 to-emerald-600 rounded-3xl shadow-2xl p-1"
+                    >
+                      <div className="w-full bg-gray-900 rounded-3xl p-8">
+                        <div className="flex flex-col items-center mb-6">
+                          <Swords className="w-20 h-20 text-green-400 mb-4" />
+                          <h2 className="text-3xl font-bold text-white text-center">
+                            Who is the Chor?
+                          </h2>
+                          <p className="text-gray-300 mt-2 text-center">
+                            Make your guess carefully!
+                          </p>
+                        </div>
+
+                        <div className="grid grid-cols-1 gap-3 max-h-[400px] overflow-y-auto">
+                          {currentRoom.players
+                            .filter((p) => p.userId !== user._id)
+                            .map((player) => (
+                              <motion.button
+                                key={player.userId}
+                                whileHover={{ scale: 1.02 }}
+                                whileTap={{ scale: 0.98 }}
+                                onClick={() => handleGuess(player.userId)}
+                                className="btn-secondary text-left p-4 bg-gray-800/80 hover:bg-green-600/20 border border-gray-700 hover:border-green-500 transition-all"
+                              >
+                                <div className="flex items-center space-x-3">
+                                  <img
+                                    src={player.avatar || "/default-avatar.png"}
+                                    alt={player.username}
+                                    className="w-12 h-12 rounded-full"
+                                  />
+                                  <div>
+                                    <div className="font-semibold text-lg">
+                                      {player.displayName || player.username}
+                                    </div>
+                                    <div className="text-sm text-gray-400">
+                                      Click to accuse
+                                    </div>
+                                  </div>
+                                </div>
+                              </motion.button>
+                            ))}
+                        </div>
+                      </div>
+                    </motion.div>
+                  </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* Shuffle Button - Hidden when card is shown */}
+            {gameState === "shuffling" && amIShuffler && !showShuffleCard && (
               <motion.div
                 initial={{ scale: 0.9, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
@@ -505,51 +629,54 @@ export default function GamePanel() {
               </motion.div>
             )}
 
-            {/* Guess UI for Sipahi */}
-            {isSipahi && gameState === "playing" && !roundResult && (
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="card bg-linear-to-br from-green-900/30 to-emerald-900/30 border-2 border-green-500"
-              >
-                <h2 className="text-2xl font-bold mb-4 text-center">
-                  Who is the Chor?
-                </h2>
-                <p className="text-gray-400 mb-6 text-center">
-                  Make your guess carefully!
-                </p>
+            {/* Guess UI for Sipahi - Hidden when card is shown */}
+            {isSipahi &&
+              gameState === "playing" &&
+              !roundResult &&
+              !showGuessCard && (
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="card bg-linear-to-br from-green-900/30 to-emerald-900/30 border-2 border-green-500"
+                >
+                  <h2 className="text-2xl font-bold mb-4 text-center">
+                    Who is the Chor?
+                  </h2>
+                  <p className="text-gray-400 mb-6 text-center">
+                    Make your guess carefully!
+                  </p>
 
-                <div className="grid grid-cols-1 gap-3">
-                  {currentRoom.players
-                    .filter((p) => p.userId !== user._id)
-                    .map((player) => (
-                      <motion.button
-                        key={player.userId}
-                        whileHover={{ scale: 1.02 }}
-                        whileTap={{ scale: 0.98 }}
-                        onClick={() => handleGuess(player.userId)}
-                        className="btn-secondary text-left p-4 bg-gray-800/80 hover:bg-green-600/20 border border-gray-700 hover:border-green-500"
-                      >
-                        <div className="flex items-center space-x-3">
-                          <img
-                            src={player.avatar || "/default-avatar.png"}
-                            alt={player.username}
-                            className="w-12 h-12 rounded-full"
-                          />
-                          <div>
-                            <div className="font-semibold text-lg">
-                              {player.displayName || player.username}
-                            </div>
-                            <div className="text-sm text-gray-400">
-                              Click to accuse
+                  <div className="grid grid-cols-1 gap-3">
+                    {currentRoom.players
+                      .filter((p) => p.userId !== user._id)
+                      .map((player) => (
+                        <motion.button
+                          key={player.userId}
+                          whileHover={{ scale: 1.02 }}
+                          whileTap={{ scale: 0.98 }}
+                          onClick={() => handleGuess(player.userId)}
+                          className="btn-secondary text-left p-4 bg-gray-800/80 hover:bg-green-600/20 border border-gray-700 hover:border-green-500"
+                        >
+                          <div className="flex items-center space-x-3">
+                            <img
+                              src={player.avatar || "/default-avatar.png"}
+                              alt={player.username}
+                              className="w-12 h-12 rounded-full"
+                            />
+                            <div>
+                              <div className="font-semibold text-lg">
+                                {player.displayName || player.username}
+                              </div>
+                              <div className="text-sm text-gray-400">
+                                Click to accuse
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      </motion.button>
-                    ))}
-                </div>
-              </motion.div>
-            )}
+                        </motion.button>
+                      ))}
+                  </div>
+                </motion.div>
+              )}
 
             {/* Waiting for Sipahi */}
             {!isSipahi && gameState === "playing" && !roundResult && (
