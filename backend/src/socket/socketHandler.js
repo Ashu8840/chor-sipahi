@@ -574,12 +574,16 @@ export const initializeSocket = (io) => {
           let points = 0;
 
           if (role === "Raja") {
-            points = isCorrect ? 1000 : 0;
+            // Raja always gets 1000 points regardless of guess result
+            points = 1000;
           } else if (role === "Mantri") {
-            points = isCorrect ? 500 : 0;
+            // Mantri always gets 500 points regardless of guess result
+            points = 500;
           } else if (role === "Sipahi") {
+            // Sipahi gets 300 points only if guess is correct
             points = isCorrect ? 300 : 0;
           } else if (role === "Chor") {
+            // Chor gets 300 points only if guess is wrong
             points = isCorrect ? 0 : 300;
           }
 
