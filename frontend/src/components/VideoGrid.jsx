@@ -628,12 +628,30 @@ function VideoPlayer({
   onToggleVideo,
 }) {
   const videoRef = useRef(null);
+  const [localAudioMuted, setLocalAudioMuted] = useState(false);
+  const [localVideoHidden, setLocalVideoHidden] = useState(false);
 
   useEffect(() => {
     if (videoRef.current && stream) {
       videoRef.current.srcObject = stream;
+      // Set initial muted state
+      videoRef.current.muted = isMuted || localAudioMuted;
     }
-  }, [stream]);
+  }, [stream, isMuted, localAudioMuted]);
+
+  const handleLocalAudioToggle = () => {
+    if (!isLocal && videoRef.current) {
+      const newMutedState = !localAudioMuted;
+      setLocalAudioMuted(newMutedState);
+      videoRef.current.muted = newMutedState;
+    }
+  };
+
+  const handleLocalVideoToggle = () => {
+    if (!isLocal) {
+      setLocalVideoHidden(!localVideoHidden);
+    }
+  };
 
   return (
     <div className="relative w-48 h-36 bg-gray-900 rounded-lg overflow-hidden border-2 border-gray-700 shadow-xl">
@@ -642,14 +660,18 @@ function VideoPlayer({
         autoPlay
         playsInline
         muted={isMuted}
-        className="w-full h-full object-cover"
+        className={`w-full h-full object-cover ${
+          localVideoHidden ? "hidden" : ""
+        }`}
       />
 
-      {!stream && (
+      {(!stream || localVideoHidden) && (
         <div className="absolute inset-0 flex items-center justify-center bg-gray-800">
           <div className="text-center">
             <VideoOff className="w-8 h-8 mx-auto text-gray-500 mb-2" />
-            <p className="text-xs text-gray-500">No video</p>
+            <p className="text-xs text-gray-500">
+              {localVideoHidden ? "Video Hidden" : "No video"}
+            </p>
           </div>
         </div>
       )}
@@ -666,11 +688,13 @@ function VideoPlayer({
         </div>
       </div>
 
+      {/* Controls for local player (own camera) */}
       {isLocal && (
         <div className="absolute top-2 right-2 flex space-x-1 video-controls">
           <button
             onClick={onToggleAudio}
-            className={`p-1.5 rounded-full ${
+            title={audioEnabled ? "Mute microphone" : "Unmute microphone"}
+            className={`p-1.5 rounded-full transition-colors ${
               audioEnabled
                 ? "bg-gray-700 hover:bg-gray-600"
                 : "bg-red-600 hover:bg-red-500"
@@ -684,7 +708,8 @@ function VideoPlayer({
           </button>
           <button
             onClick={onToggleVideo}
-            className={`p-1.5 rounded-full ${
+            title={videoEnabled ? "Turn off camera" : "Turn on camera"}
+            className={`p-1.5 rounded-full transition-colors ${
               videoEnabled
                 ? "bg-gray-700 hover:bg-gray-600"
                 : "bg-red-600 hover:bg-red-500"
@@ -694,6 +719,46 @@ function VideoPlayer({
               <Video className="w-3 h-3 text-white" />
             ) : (
               <VideoOff className="w-3 h-3 text-white" />
+            )}
+          </button>
+        </div>
+      )}
+
+      {/* Controls for remote players (mute/hide for yourself) */}
+      {!isLocal && (
+        <div className="absolute top-2 right-2 flex space-x-1 video-controls">
+          <button
+            onClick={handleLocalAudioToggle}
+            title={localAudioMuted ? "Unmute this player" : "Mute this player"}
+            className={`p-1.5 rounded-full transition-colors ${
+              localAudioMuted
+                ? "bg-red-600 hover:bg-red-500"
+                : "bg-gray-700/80 hover:bg-gray-600"
+            }`}
+          >
+            {localAudioMuted ? (
+              <MicOff className="w-3 h-3 text-white" />
+            ) : (
+              <Mic className="w-3 h-3 text-white" />
+            )}
+          </button>
+          <button
+            onClick={handleLocalVideoToggle}
+            title={
+              localVideoHidden
+                ? "Show this player's video"
+                : "Hide this player's video"
+            }
+            className={`p-1.5 rounded-full transition-colors ${
+              localVideoHidden
+                ? "bg-red-600 hover:bg-red-500"
+                : "bg-gray-700/80 hover:bg-gray-600"
+            }`}
+          >
+            {localVideoHidden ? (
+              <VideoOff className="w-3 h-3 text-white" />
+            ) : (
+              <Video className="w-3 h-3 text-white" />
             )}
           </button>
         </div>
