@@ -479,8 +479,12 @@ function DraggableVideoPlayer({
   const offsetRef = useRef({ x: 0, y: 0 });
 
   const handleMouseDown = (e) => {
-    if (e.target.closest(".video-controls")) return; // Don't drag when clicking controls
+    // Don't drag when clicking controls or video element
+    if (e.target.closest(".video-controls") || e.target.tagName === "BUTTON") {
+      return;
+    }
 
+    e.preventDefault();
     setIsDragging(true);
     const rect = dragRef.current.getBoundingClientRect();
     offsetRef.current = {
@@ -490,7 +494,10 @@ function DraggableVideoPlayer({
   };
 
   const handleTouchStart = (e) => {
-    if (e.target.closest(".video-controls")) return; // Don't drag when clicking controls
+    // Don't drag when clicking controls or video element
+    if (e.target.closest(".video-controls") || e.target.tagName === "BUTTON") {
+      return;
+    }
 
     setIsDragging(true);
     const touch = e.touches[0];
@@ -667,12 +674,15 @@ function VideoPlayer({
       </div>
 
       {/* Show controls for local user, show status indicators for remote users */}
-      <div className="absolute top-2 right-2 flex space-x-1 video-controls">
+      <div className="absolute top-2 right-2 flex space-x-1 video-controls pointer-events-auto">
         {isLocal ? (
           <>
             <button
-              onClick={onToggleAudio}
-              className={`p-1.5 rounded-full ${
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggleAudio && onToggleAudio();
+              }}
+              className={`p-1.5 rounded-full transition-colors ${
                 audioEnabled
                   ? "bg-gray-700 hover:bg-gray-600"
                   : "bg-red-600 hover:bg-red-500"
@@ -686,8 +696,11 @@ function VideoPlayer({
               )}
             </button>
             <button
-              onClick={onToggleVideo}
-              className={`p-1.5 rounded-full ${
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggleVideo && onToggleVideo();
+              }}
+              className={`p-1.5 rounded-full transition-colors ${
                 videoEnabled
                   ? "bg-gray-700 hover:bg-gray-600"
                   : "bg-red-600 hover:bg-red-500"
