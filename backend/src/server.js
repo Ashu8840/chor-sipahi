@@ -38,10 +38,33 @@ app.use(
   })
 );
 
-// CORS
+// CORS - Remove trailing slash to fix CORS error
+const allowedOrigins = [
+  "http://localhost:5173",
+  "https://chor-sipahi-br9m.vercel.app",
+  process.env.FRONTEND_URL,
+].filter(Boolean);
+
 app.use(
   cors({
-    origin: process.env.FRONTEND_URL || "https://chor-sipahi-br9m.vercel.app/",
+    origin: function (origin, callback) {
+      // Allow requests with no origin (like mobile apps or Postman)
+      if (!origin) return callback(null, true);
+
+      // Remove trailing slash from origin if present
+      const normalizedOrigin = origin.replace(/\/$/, "");
+
+      if (
+        allowedOrigins.some((allowed) => {
+          const normalizedAllowed = allowed.replace(/\/$/, "");
+          return normalizedAllowed === normalizedOrigin;
+        })
+      ) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
     credentials: true,
   })
 );
