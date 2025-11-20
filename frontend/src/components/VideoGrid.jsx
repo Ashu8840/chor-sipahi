@@ -10,83 +10,26 @@ export default function VideoGrid({ roomId, players, currentUserId }) {
   const [videoEnabled, setVideoEnabled] = useState(true);
   const localVideoRef = useRef(null);
   const peerConnections = useRef({});
+  const localStreamRef = useRef(null); // Keep a ref to access latest localStream
 
   console.log("VideoGrid rendered with players:", players);
   console.log("Current user ID:", currentUserId);
-
-  useEffect(() => {
-    initializeMedia();
-
-    socketService.on("webrtc_signal", handleSignal);
-
-    // Cleanup when browser tab closes or refreshes
-    const handleBeforeUnload = () => {
-      cleanup();
-    };
-    window.addEventListener("beforeunload", handleBeforeUnload);
-
-    return () => {
-      // Cleanup when component unmounts or roomId changes
-      cleanup();
-      socketService.off("webrtc_signal", handleSignal);
-      window.removeEventListener("beforeunload", handleBeforeUnload);
-    };
-  }, [roomId]);
-
-  // Initialize peer connections when players change
-  useEffect(() => {
-    if (localStream && players.length > 0) {
-      console.log("Players changed, updating peer connections...");
-
-      // Get current player IDs
-      const currentPlayerIds = new Set(players.map((p) => p.userId));
-
-      // Remove connections for players who left
-      Object.keys(peerConnections.current).forEach((userId) => {
-        if (!currentPlayerIds.has(userId)) {
-          console.log(`Removing peer connection for ${userId}`);
-          if (peerConnections.current[userId]) {
-            peerConnections.current[userId].close();
-            delete peerConnections.current[userId];
-          }
-          // Remove remote stream
-          setRemoteStreams((prev) => {
-            const newStreams = { ...prev };
-            if (newStreams[userId]) {
-              newStreams[userId].getTracks().forEach((track) => track.stop());
-              delete newStreams[userId];
-            }
-            return newStreams;
-          });
-        }
-      });
-
-      // Create connections for new players
-      players.forEach((player) => {
-        if (
-          player.userId !== currentUserId &&
-          !peerConnections.current[player.userId]
-        ) {
-          console.log(`Creating peer connection for ${player.userId}`);
-          createPeerConnection(player.userId, localStream);
-        }
-      });
-    }
-  }, [players, localStream, currentUserId]);
+  console.log("Remote streams:", Object.keys(remoteStreams));
 
   const initializeMedia = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: true,
+        video: { width: 640, height: 480 },
         audio: true,
       });
 
       setLocalStream(stream);
+      localStreamRef.current = stream;
       if (localVideoRef.current) {
         localVideoRef.current.srcObject = stream;
       }
 
-      console.log("Local media initialized successfully");
+      console.log("Local media initialized successfully", stream.getTracks());
     } catch (error) {
       console.error("Error accessing media devices:", error);
       if (error.name === "NotAllowedError") {
@@ -104,6 +47,12 @@ export default function VideoGrid({ roomId, players, currentUserId }) {
   };
 
   const createPeerConnection = async (targetUserId, stream) => {
+    // Don't recreate if already exists
+    if (peerConnections.current[targetUserId]) {
+      console.log(`Peer connection for ${targetUserId} already exists`);
+      return;
+    }
+
     const configuration = {
       iceServers: [
         { urls: "stun:stun.l.google.com:19302" },
@@ -119,9 +68,10 @@ export default function VideoGrid({ roomId, players, currentUserId }) {
 
     // Add local stream tracks to peer connection
     stream.getTracks().forEach((track) => {
-      peerConnection.addTrack(track, stream);
+      const sender = peerConnection.addTrack(track, stream);
       console.log(
-        `Added ${track.kind} track to peer connection for ${targetUserId}`
+        `Added ${track.kind} track to peer connection for ${targetUserId}`,
+        sender
       );
     });
 
@@ -131,10 +81,12 @@ export default function VideoGrid({ roomId, players, currentUserId }) {
         `Received ${event.track.kind} track from ${targetUserId}`,
         event.streams[0]
       );
-      setRemoteStreams((prev) => ({
-        ...prev,
-        [targetUserId]: event.streams[0],
-      }));
+      if (event.streams && event.streams[0]) {
+        setRemoteStreams((prev) => ({
+          ...prev,
+          [targetUserId]: event.streams[0],
+        }));
+      }
     };
 
     // Monitor connection state
@@ -143,6 +95,10 @@ export default function VideoGrid({ roomId, players, currentUserId }) {
         `Peer connection state with ${targetUserId}:`,
         peerConnection.connectionState
       );
+      if (peerConnection.connectionState === "failed") {
+        console.log(`Connection failed with ${targetUserId}, will retry...`);
+        // Optionally retry connection
+      }
     };
 
     peerConnection.oniceconnectionstatechange = () => {
@@ -169,7 +125,10 @@ export default function VideoGrid({ roomId, players, currentUserId }) {
 
     // Create and send offer
     try {
-      const offer = await peerConnection.createOffer();
+      const offer = await peerConnection.createOffer({
+        offerToReceiveAudio: true,
+        offerToReceiveVideo: true,
+      });
       await peerConnection.setLocalDescription(offer);
 
       console.log(`Sending offer to ${targetUserId}`);
@@ -187,6 +146,8 @@ export default function VideoGrid({ roomId, players, currentUserId }) {
   };
 
   const handleSignal = async ({ fromUserId, signal }) => {
+    console.log(`Received signal from ${fromUserId}:`, signal.type);
+
     if (signal.type === "offer") {
       await handleOffer(fromUserId, signal.offer);
     } else if (signal.type === "answer") {
@@ -197,7 +158,8 @@ export default function VideoGrid({ roomId, players, currentUserId }) {
   };
 
   const handleOffer = async (fromUserId, offer) => {
-    if (!localStream) {
+    const stream = localStreamRef.current;
+    if (!stream) {
       console.log(
         `Cannot handle offer from ${fromUserId} - no local stream yet`
       );
@@ -205,6 +167,11 @@ export default function VideoGrid({ roomId, players, currentUserId }) {
     }
 
     console.log(`Handling offer from ${fromUserId}`);
+
+    // Close existing connection if any
+    if (peerConnections.current[fromUserId]) {
+      peerConnections.current[fromUserId].close();
+    }
 
     const peerConnection = new RTCPeerConnection({
       iceServers: [
@@ -216,8 +183,8 @@ export default function VideoGrid({ roomId, players, currentUserId }) {
 
     peerConnections.current[fromUserId] = peerConnection;
 
-    localStream.getTracks().forEach((track) => {
-      peerConnection.addTrack(track, localStream);
+    stream.getTracks().forEach((track) => {
+      peerConnection.addTrack(track, stream);
       console.log(
         `Added ${track.kind} track to peer connection for ${fromUserId}`
       );
@@ -228,10 +195,12 @@ export default function VideoGrid({ roomId, players, currentUserId }) {
         `Received ${event.track.kind} track from ${fromUserId}`,
         event.streams[0]
       );
-      setRemoteStreams((prev) => ({
-        ...prev,
-        [fromUserId]: event.streams[0],
-      }));
+      if (event.streams && event.streams[0]) {
+        setRemoteStreams((prev) => ({
+          ...prev,
+          [fromUserId]: event.streams[0],
+        }));
+      }
     };
 
     // Monitor connection state
@@ -284,11 +253,89 @@ export default function VideoGrid({ roomId, players, currentUserId }) {
     }
   };
 
+  useEffect(() => {
+    initializeMedia();
+
+    socketService.on("webrtc_signal", handleSignal);
+
+    // Cleanup when browser tab closes or refreshes
+    const handleBeforeUnload = () => {
+      cleanup();
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+
+    return () => {
+      // Cleanup when component unmounts or roomId changes
+      cleanup();
+      socketService.off("webrtc_signal", handleSignal);
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+    };
+  }, [roomId]);
+
+  // Initialize peer connections when players change
+  useEffect(() => {
+    const stream = localStreamRef.current;
+    if (stream && players.length > 0) {
+      console.log(
+        "Players changed, updating peer connections...",
+        players.map((p) => p.userId)
+      );
+
+      // Get current player IDs
+      const currentPlayerIds = new Set(players.map((p) => p.userId));
+
+      // Remove connections for players who left
+      Object.keys(peerConnections.current).forEach((userId) => {
+        if (!currentPlayerIds.has(userId)) {
+          console.log(`Removing peer connection for ${userId}`);
+          if (peerConnections.current[userId]) {
+            peerConnections.current[userId].close();
+            delete peerConnections.current[userId];
+          }
+          // Remove remote stream
+          setRemoteStreams((prev) => {
+            const newStreams = { ...prev };
+            if (newStreams[userId]) {
+              newStreams[userId].getTracks().forEach((track) => track.stop());
+              delete newStreams[userId];
+            }
+            return newStreams;
+          });
+        }
+      });
+
+      // Create connections for new players
+      players.forEach((player) => {
+        if (
+          player.userId !== currentUserId &&
+          !peerConnections.current[player.userId]
+        ) {
+          console.log(
+            `Creating peer connection for new player ${player.userId}`
+          );
+          createPeerConnection(player.userId, stream);
+        }
+      });
+    }
+  }, [players, localStream, currentUserId]);
+
   const handleAnswer = async (fromUserId, answer) => {
     const peerConnection = peerConnections.current[fromUserId];
     if (peerConnection) {
-      await peerConnection.setRemoteDescription(
-        new RTCSessionDescription(answer)
+      console.log(`Handling answer from ${fromUserId}`);
+      try {
+        await peerConnection.setRemoteDescription(
+          new RTCSessionDescription(answer)
+        );
+      } catch (error) {
+        console.error(
+          `Error setting remote description from ${fromUserId}:`,
+          error
+        );
+      }
+    } else {
+      console.log(
+        `No peer connection found for ${fromUserId} when handling answer`
       );
     }
   };
@@ -296,7 +343,16 @@ export default function VideoGrid({ roomId, players, currentUserId }) {
   const handleCandidate = async (fromUserId, candidate) => {
     const peerConnection = peerConnections.current[fromUserId];
     if (peerConnection) {
-      await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+      console.log(`Adding ICE candidate from ${fromUserId}`);
+      try {
+        await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+      } catch (error) {
+        console.error(`Error adding ICE candidate from ${fromUserId}:`, error);
+      }
+    } else {
+      console.log(
+        `No peer connection found for ${fromUserId} when handling candidate`
+      );
     }
   };
 
@@ -379,13 +435,11 @@ export default function VideoGrid({ roomId, players, currentUserId }) {
             isCurrentUser,
             hasStream: !!stream,
             streamActive: stream?.active,
-            tracks: stream
-              ?.getTracks()
-              .map((t) => ({
-                kind: t.kind,
-                enabled: t.enabled,
-                readyState: t.readyState,
-              })),
+            tracks: stream?.getTracks().map((t) => ({
+              kind: t.kind,
+              enabled: t.enabled,
+              readyState: t.readyState,
+            })),
           });
 
           return (
