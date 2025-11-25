@@ -21,7 +21,7 @@ const server = http.createServer(app);
 // Initialize Socket.IO
 const io = new Server(server, {
   cors: {
-    origin: process.env.FRONTEND_URL || "https://chor-sipahi.onrender.com",
+    origin: process.env.FRONTEND_URL ||"https://chor-sipahi.vercel.app",
     methods: ["GET", "POST"],
     credentials: true,
   },
