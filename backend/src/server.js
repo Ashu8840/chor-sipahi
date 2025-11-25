@@ -41,6 +41,7 @@ app.use(
 // CORS - Remove trailing slash to fix CORS error
 const allowedOrigins = [
   "http://localhost:5173",
+  "https://chor-sipahi.vercel.app", 
   "https://chor-sipahi-br9m.vercel.app",
   process.env.FRONTEND_URL,
 ].filter(Boolean);
