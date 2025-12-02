@@ -24,6 +24,8 @@ const io = new Server(server, {
     origin: [
       process.env.FRONTEND_URL || "http://localhost:5173",
       "http://localhost:8081",
+      "https://chor-sipahi.vercel.app",
+      "https://chor-sipahi-br9m.vercel.app",
     ],
     methods: ["GET", "POST"],
     credentials: true,
@@ -45,6 +47,7 @@ app.use(
 const allowedOrigins = [
   "http://localhost:5173",
   "http://localhost:8081",
+  "https://chor-sipahi.vercel.app",
   "https://chor-sipahi-br9m.vercel.app",
   process.env.FRONTEND_URL,
 ].filter(Boolean);
