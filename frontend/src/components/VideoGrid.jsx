@@ -49,6 +49,11 @@ export default function VideoGrid({ roomId, players, currentUserId }) {
     }
   };
 
+  const sendWebRTCSignal = (targetUserId, signal) => {
+    console.log(`Sending ${signal.type} signal to ${targetUserId}`);
+    socketService.sendWebRTCSignal(roomId, targetUserId, signal);
+  };
+
   const createPeerConnection = async (targetUserId, stream) => {
     // Don't recreate if already exists
     if (peerConnections.current[targetUserId]) {
@@ -115,13 +120,9 @@ export default function VideoGrid({ roomId, players, currentUserId }) {
     peerConnection.onicecandidate = (event) => {
       if (event.candidate) {
         console.log(`Sending ICE candidate to ${targetUserId}`);
-        socketService.emit("webrtc_signal", {
-          roomId,
-          targetUserId,
-          signal: {
-            type: "candidate",
-            candidate: event.candidate,
-          },
+        sendWebRTCSignal(targetUserId, {
+          type: "candidate",
+          candidate: event.candidate,
         });
       }
     };
@@ -135,13 +136,9 @@ export default function VideoGrid({ roomId, players, currentUserId }) {
       await peerConnection.setLocalDescription(offer);
 
       console.log(`Sending offer to ${targetUserId}`);
-      socketService.emit("webrtc_signal", {
-        roomId,
-        targetUserId,
-        signal: {
-          type: "offer",
-          offer: offer,
-        },
+      sendWebRTCSignal(targetUserId, {
+        type: "offer",
+        offer: offer,
       });
     } catch (error) {
       console.error(`Error creating offer for ${targetUserId}:`, error);
@@ -224,13 +221,9 @@ export default function VideoGrid({ roomId, players, currentUserId }) {
     peerConnection.onicecandidate = (event) => {
       if (event.candidate) {
         console.log(`Sending ICE candidate to ${fromUserId}`);
-        socketService.emit("webrtc_signal", {
-          roomId,
-          targetUserId: fromUserId,
-          signal: {
-            type: "candidate",
-            candidate: event.candidate,
-          },
+        sendWebRTCSignal(fromUserId, {
+          type: "candidate",
+          candidate: event.candidate,
         });
       }
     };
@@ -243,13 +236,9 @@ export default function VideoGrid({ roomId, players, currentUserId }) {
       await peerConnection.setLocalDescription(answer);
 
       console.log(`Sending answer to ${fromUserId}`);
-      socketService.emit("webrtc_signal", {
-        roomId,
-        targetUserId: fromUserId,
-        signal: {
-          type: "answer",
-          answer: answer,
-        },
+      sendWebRTCSignal(fromUserId, {
+        type: "answer",
+        answer: answer,
       });
     } catch (error) {
       console.error(`Error handling offer from ${fromUserId}:`, error);
@@ -313,10 +302,17 @@ export default function VideoGrid({ roomId, players, currentUserId }) {
           player.userId !== currentUserId &&
           !peerConnections.current[player.userId]
         ) {
-          console.log(
-            `Creating peer connection for new player ${player.userId}`
-          );
-          createPeerConnection(player.userId, stream);
+          // Prevent glare: Only the user with the "larger" ID initiates the connection
+          if (currentUserId > player.userId) {
+            console.log(
+              `Creating peer connection for new player ${player.userId} (Initiator)`
+            );
+            createPeerConnection(player.userId, stream);
+          } else {
+            console.log(
+              `Waiting for offer from ${player.userId} (Non-initiator)`
+            );
+          }
         }
       });
     }

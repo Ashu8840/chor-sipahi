@@ -1,6 +1,28 @@
-# Welcome to your Expo app 👋
+# Chor Sipahi - Mobile App
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+React Native mobile application for the Chor Sipahi multiplayer card game, built with Expo.
+
+## Features
+
+✅ **Authentication** - Login and register with JWT tokens stored in AsyncStorage  
+✅ **Room Management** - Create and join game rooms with optional passwords  
+✅ **Real-time Gameplay** - Socket.IO for live game updates  
+✅ **Match History** - View past games and performance  
+✅ **Leaderboard** - Global player rankings  
+✅ **Profile** - User statistics and account management  
+✅ **Chat** - In-room messaging  
+✅ **Role System** - Raja, Mantri, Sipahi, Chor roles with unique gameplay  
+✅ **Scoring** - Raja: 1000pts, Mantri: 500pts, Sipahi/Chor: 300pts based on results
+
+## Tech Stack
+
+- **Framework**: React Native 0.81.5 with Expo SDK 54
+- **Navigation**: Expo Router (file-based routing)
+- **State Management**: Zustand
+- **Storage**: AsyncStorage
+- **Real-time**: Socket.IO Client
+- **HTTP**: Axios
+- **Notifications**: React Native Toast Message
 
 ## Get started
 
@@ -10,7 +32,15 @@ This is an [Expo](https://expo.dev) project created with [`create-expo-app`](htt
    npm install
    ```
 
-2. Start the app
+2. Configure environment variables  
+   Create a `.env` file in the root with:
+
+   ```
+   REACT_APP_API_URL=https://chor-sipahi.onrender.com
+   REACT_APP_SOCKET_URL=https://chor-sipahi.onrender.com
+   ```
+
+3. Start the app
 
    ```bash
    npx expo start

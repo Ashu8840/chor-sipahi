@@ -14,6 +14,8 @@
   "license": "ISC",
   "description": "Chor-Sipahi Game Server - A classic Indian game of bluff and detection",
   "dependencies": {
+    "@react-native-async-storage/async-storage": "^2.2.0",
+    "axios": "^1.13.2",
     "bcryptjs": "^3.0.3",
     "cloudinary": "^1.41.3",
     "cookie-parser": "^1.4.7",
@@ -26,7 +28,10 @@
     "multer": "^2.0.2",
     "multer-storage-cloudinary": "^4.0.0",
     "nodemon": "^3.1.7",
-    "socket.io": "^4.8.1"
+    "react-native-toast-message": "^2.3.3",
+    "socket.io": "^4.8.1",
+    "socket.io-client": "^4.8.1",
+    "zustand": "^5.0.8"
   },
   "devDependencies": {
     "concurrently": "^9.2.1"

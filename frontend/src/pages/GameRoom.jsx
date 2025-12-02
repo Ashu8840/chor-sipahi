@@ -17,6 +17,7 @@ import Navbar from "../components/Navbar";
 import Loading from "../components/Loading";
 import FloatingChat from "../components/FloatingChat";
 import VideoGrid from "../components/VideoGrid";
+import BingoGame from "../components/BingoGame";
 import { roomAPI } from "../services/api";
 import socketService from "../services/socket";
 import { useGameStore } from "../context/gameStore";
@@ -261,8 +262,8 @@ export default function GameRoom() {
               </div>
             </div>
 
-            {/* Ready/Start buttons */}
-            {gameState === "waiting" && (
+            {/* Ready/Start buttons - Only for Chor-Sipahi */}
+            {gameState === "waiting" && currentRoom.gameType !== "bingo" && (
               <div className="flex items-center space-x-3">
                 <button
                   onClick={handleToggleReady}
@@ -299,223 +300,233 @@ export default function GameRoom() {
           <div className="grid lg:grid-cols-3 gap-6">
             {/* Left: Game Area */}
             <div className="lg:col-span-2 space-y-6">
-              {/* My Role Card */}
-              {myRole && gameState === "playing" && (
-                <motion.div
-                  initial={{ scale: 0.9 }}
-                  animate={{ scale: 1 }}
-                  className="card bg-linear-to-br from-purple-900/30 to-pink-900/30 border-2 border-purple-500"
-                >
-                  <div className="text-center space-y-4">
-                    <h2 className="text-2xl font-bold">Your Role</h2>
-                    <div className={`text-6xl ${roleColors[myRole]}`}>
-                      {roleIcons[myRole] &&
-                        (() => {
-                          const Icon = roleIcons[myRole];
-                          return <Icon className="w-24 h-24 mx-auto" />;
-                        })()}
-                    </div>
-                    <div className={`text-4xl font-bold ${roleColors[myRole]}`}>
-                      {myRole}
-                    </div>
-                  </div>
-                </motion.div>
-              )}
-
-              {/* Shuffle Button */}
-              {gameState === "shuffling" && amIShuffler && (
-                <motion.div
-                  initial={{ scale: 0.9 }}
-                  animate={{ scale: 1 }}
-                  className="card text-center"
-                >
-                  <h2 className="text-2xl font-bold mb-4">
-                    You are the Shuffler!
-                  </h2>
-                  <button
-                    onClick={handleShuffle}
-                    className="btn-primary flex items-center space-x-2 mx-auto text-lg px-8 py-4"
-                  >
-                    <Shuffle className="w-6 h-6" />
-                    <span>Shuffle Roles</span>
-                  </button>
-                </motion.div>
-              )}
-
-              {/* Guess UI */}
-              {isSipahi && gameState === "playing" && !roundResult && (
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  className="card"
-                >
-                  <h2 className="text-2xl font-bold mb-4">Who is the Chor?</h2>
-                  <p className="text-gray-400 mb-4">
-                    Click on a player to make your guess:
-                  </p>
-                  <div className="grid grid-cols-2 gap-3">
-                    {currentRoom.players
-                      .filter((p) => p.userId !== user._id)
-                      .map((player) => (
-                        <button
-                          key={player.userId}
-                          onClick={() => handleGuess(player.userId)}
-                          className="btn-secondary text-left p-4 hover:bg-purple-600/20"
-                        >
-                          <div className="flex items-center space-x-3">
-                            <img
-                              src={player.avatar || "/default-avatar.png"}
-                              alt={player.username}
-                              className="w-10 h-10 rounded-full"
-                            />
-                            <div>
-                              <div className="font-semibold">
-                                {player.displayName || player.username}
-                              </div>
-                            </div>
-                          </div>
-                        </button>
-                      ))}
-                  </div>
-                </motion.div>
-              )}
-
-              {/* Round Results */}
-              {roundResult && gameState === "results" && (
-                <motion.div
-                  initial={{ scale: 0.9 }}
-                  animate={{ scale: 1 }}
-                  className="card"
-                >
-                  <h2 className="text-2xl font-bold mb-4">Round Results</h2>
-                  <div className="space-y-4">
-                    <div
-                      className={`p-4 rounded-lg ${
-                        roundResult.isCorrect
-                          ? "bg-green-600/20"
-                          : "bg-red-600/20"
-                      }`}
+              {currentRoom.gameType === "bingo" ? (
+                <BingoGame room={currentRoom} currentUser={user} />
+              ) : (
+                <>
+                  {/* My Role Card */}
+                  {myRole && gameState === "playing" && (
+                    <motion.div
+                      initial={{ scale: 0.9 }}
+                      animate={{ scale: 1 }}
+                      className="card bg-linear-to-br from-purple-900/30 to-pink-900/30 border-2 border-purple-500"
                     >
-                      <p className="text-lg">
-                        <span className="font-bold">
-                          {roundResult.sipahiName}
-                        </span>{" "}
-                        guessed{" "}
-                        <span className="font-bold">
-                          {roundResult.guessedName}
-                        </span>
-                      </p>
-                      <p className="text-2xl font-bold mt-2">
-                        {roundResult.isCorrect ? "✓ Correct!" : "✗ Wrong!"}
-                      </p>
-                      <p className="mt-2">
-                        The Chor was:{" "}
-                        <span className="font-bold">
-                          {roundResult.chorName}
-                        </span>
-                      </p>
-                    </div>
-
-                    <div>
-                      <h3 className="font-bold mb-2">Roles:</h3>
-                      <div className="grid grid-cols-2 gap-2">
-                        {Object.entries(roundResult.roles).map(
-                          ([userId, role]) => {
-                            const player = currentRoom.players.find(
-                              (p) => p.userId === userId
-                            );
-                            return (
-                              <div
-                                key={userId}
-                                className="flex items-center justify-between p-2 bg-gray-800/50 rounded"
-                              >
-                                <span>
-                                  {player?.displayName || player?.username}
-                                </span>
-                                <span
-                                  className={`font-bold ${roleColors[role]}`}
-                                >
-                                  {role}
-                                </span>
-                              </div>
-                            );
-                          }
-                        )}
+                      <div className="text-center space-y-4">
+                        <h2 className="text-2xl font-bold">Your Role</h2>
+                        <div className={`text-6xl ${roleColors[myRole]}`}>
+                          {roleIcons[myRole] &&
+                            (() => {
+                              const Icon = roleIcons[myRole];
+                              return <Icon className="w-24 h-24 mx-auto" />;
+                            })()}
+                        </div>
+                        <div
+                          className={`text-4xl font-bold ${roleColors[myRole]}`}
+                        >
+                          {myRole}
+                        </div>
                       </div>
-                    </div>
+                    </motion.div>
+                  )}
 
-                    <div>
-                      <h3 className="font-bold mb-2">Points This Round:</h3>
-                      <div className="space-y-1">
-                        {Object.entries(roundResult.pointsDistribution).map(
-                          ([userId, points]) => {
-                            const player = currentRoom.players.find(
-                              (p) => p.userId === userId
-                            );
-                            return (
-                              <div
-                                key={userId}
-                                className="flex items-center justify-between p-2"
-                              >
-                                <span>
-                                  {player?.displayName || player?.username}
-                                </span>
-                                <span className="font-bold text-yellow-500">
-                                  +{points}
-                                </span>
-                              </div>
-                            );
-                          }
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </motion.div>
-              )}
+                  {/* Shuffle Button */}
+                  {gameState === "shuffling" && amIShuffler && (
+                    <motion.div
+                      initial={{ scale: 0.9 }}
+                      animate={{ scale: 1 }}
+                      className="card text-center"
+                    >
+                      <h2 className="text-2xl font-bold mb-4">
+                        You are the Shuffler!
+                      </h2>
+                      <button
+                        onClick={handleShuffle}
+                        className="btn-primary flex items-center space-x-2 mx-auto text-lg px-8 py-4"
+                      >
+                        <Shuffle className="w-6 h-6" />
+                        <span>Shuffle Roles</span>
+                      </button>
+                    </motion.div>
+                  )}
 
-              {/* Game Finished */}
-              {gameState === "finished" && (
-                <motion.div
-                  initial={{ scale: 0.9 }}
-                  animate={{ scale: 1 }}
-                  className="card bg-linear-to-br from-yellow-900/30 to-orange-900/30 border-2 border-yellow-500"
-                >
-                  <div className="text-center space-y-4">
-                    <Trophy className="w-24 h-24 mx-auto text-yellow-500" />
-                    <h2 className="text-3xl font-bold">Game Over!</h2>
-                    <div className="space-y-2">
-                      {Object.entries(scores)
-                        .sort(([, a], [, b]) => b - a)
-                        .map(([userId, score], index) => {
-                          const player = currentRoom.players.find(
-                            (p) => p.userId === userId
-                          );
-                          return (
-                            <div
-                              key={userId}
-                              className={`flex items-center justify-between p-3 rounded ${
-                                index === 0
-                                  ? "bg-yellow-600/30 border-2 border-yellow-500"
-                                  : "bg-gray-800/50"
-                              }`}
+                  {/* Guess UI */}
+                  {isSipahi && gameState === "playing" && !roundResult && (
+                    <motion.div
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      className="card"
+                    >
+                      <h2 className="text-2xl font-bold mb-4">
+                        Who is the Chor?
+                      </h2>
+                      <p className="text-gray-400 mb-4">
+                        Click on a player to make your guess:
+                      </p>
+                      <div className="grid grid-cols-2 gap-3">
+                        {currentRoom.players
+                          .filter((p) => p.userId !== user._id)
+                          .map((player) => (
+                            <button
+                              key={player.userId}
+                              onClick={() => handleGuess(player.userId)}
+                              className="btn-secondary text-left p-4 hover:bg-purple-600/20"
                             >
                               <div className="flex items-center space-x-3">
-                                {index === 0 && (
-                                  <Crown className="w-6 h-6 text-yellow-500" />
-                                )}
-                                <span className="font-semibold">
-                                  {player?.displayName || player?.username}
-                                </span>
+                                <img
+                                  src={player.avatar || "/default-avatar.png"}
+                                  alt={player.username}
+                                  className="w-10 h-10 rounded-full"
+                                />
+                                <div>
+                                  <div className="font-semibold">
+                                    {player.displayName || player.username}
+                                  </div>
+                                </div>
                               </div>
-                              <span className="text-2xl font-bold text-yellow-500">
-                                {score}
-                              </span>
-                            </div>
-                          );
-                        })}
-                    </div>
-                  </div>
-                </motion.div>
+                            </button>
+                          ))}
+                      </div>
+                    </motion.div>
+                  )}
+
+                  {/* Round Results */}
+                  {roundResult && gameState === "results" && (
+                    <motion.div
+                      initial={{ scale: 0.9 }}
+                      animate={{ scale: 1 }}
+                      className="card"
+                    >
+                      <h2 className="text-2xl font-bold mb-4">Round Results</h2>
+                      <div className="space-y-4">
+                        <div
+                          className={`p-4 rounded-lg ${
+                            roundResult.isCorrect
+                              ? "bg-green-600/20"
+                              : "bg-red-600/20"
+                          }`}
+                        >
+                          <p className="text-lg">
+                            <span className="font-bold">
+                              {roundResult.sipahiName}
+                            </span>{" "}
+                            guessed{" "}
+                            <span className="font-bold">
+                              {roundResult.guessedName}
+                            </span>
+                          </p>
+                          <p className="text-2xl font-bold mt-2">
+                            {roundResult.isCorrect ? "✓ Correct!" : "✗ Wrong!"}
+                          </p>
+                          <p className="mt-2">
+                            The Chor was:{" "}
+                            <span className="font-bold">
+                              {roundResult.chorName}
+                            </span>
+                          </p>
+                        </div>
+
+                        <div>
+                          <h3 className="font-bold mb-2">Roles:</h3>
+                          <div className="grid grid-cols-2 gap-2">
+                            {Object.entries(roundResult.roles).map(
+                              ([userId, role]) => {
+                                const player = currentRoom.players.find(
+                                  (p) => p.userId === userId
+                                );
+                                return (
+                                  <div
+                                    key={userId}
+                                    className="flex items-center justify-between p-2 bg-gray-800/50 rounded"
+                                  >
+                                    <span>
+                                      {player?.displayName || player?.username}
+                                    </span>
+                                    <span
+                                      className={`font-bold ${roleColors[role]}`}
+                                    >
+                                      {role}
+                                    </span>
+                                  </div>
+                                );
+                              }
+                            )}
+                          </div>
+                        </div>
+
+                        <div>
+                          <h3 className="font-bold mb-2">Points This Round:</h3>
+                          <div className="space-y-1">
+                            {Object.entries(roundResult.pointsDistribution).map(
+                              ([userId, points]) => {
+                                const player = currentRoom.players.find(
+                                  (p) => p.userId === userId
+                                );
+                                return (
+                                  <div
+                                    key={userId}
+                                    className="flex items-center justify-between p-2"
+                                  >
+                                    <span>
+                                      {player?.displayName || player?.username}
+                                    </span>
+                                    <span className="font-bold text-yellow-500">
+                                      +{points}
+                                    </span>
+                                  </div>
+                                );
+                              }
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+
+                  {/* Game Finished */}
+                  {gameState === "finished" && (
+                    <motion.div
+                      initial={{ scale: 0.9 }}
+                      animate={{ scale: 1 }}
+                      className="card bg-linear-to-br from-yellow-900/30 to-orange-900/30 border-2 border-yellow-500"
+                    >
+                      <div className="text-center space-y-4">
+                        <Trophy className="w-24 h-24 mx-auto text-yellow-500" />
+                        <h2 className="text-3xl font-bold">Game Over!</h2>
+                        <div className="space-y-2">
+                          {Object.entries(scores)
+                            .sort(([, a], [, b]) => b - a)
+                            .map(([userId, score], index) => {
+                              const player = currentRoom.players.find(
+                                (p) => p.userId === userId
+                              );
+                              return (
+                                <div
+                                  key={userId}
+                                  className={`flex items-center justify-between p-3 rounded ${
+                                    index === 0
+                                      ? "bg-yellow-600/30 border-2 border-yellow-500"
+                                      : "bg-gray-800/50"
+                                  }`}
+                                >
+                                  <div className="flex items-center space-x-3">
+                                    {index === 0 && (
+                                      <Crown className="w-6 h-6 text-yellow-500" />
+                                    )}
+                                    <span className="font-semibold">
+                                      {player?.displayName || player?.username}
+                                    </span>
+                                  </div>
+                                  <span className="text-2xl font-bold text-yellow-500">
+                                    {score}
+                                  </span>
+                                </div>
+                              );
+                            })}
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+                </>
               )}
             </div>
 

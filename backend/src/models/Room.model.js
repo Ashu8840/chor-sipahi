@@ -18,6 +18,24 @@ const roomSchema = new mongoose.Schema(
       enum: ["chat", "video"],
       required: true,
     },
+    gameType: {
+      type: String,
+      enum: ["chor-sipahi", "bingo"],
+      default: "chor-sipahi",
+    },
+    bingoSettings: {
+      gridSize: {
+        type: Number,
+        default: 5,
+        enum: [5, 6, 7],
+      },
+      maxPlayers: {
+        type: Number,
+        default: 2,
+        min: 2,
+        max: 6,
+      },
+    },
     isPublic: {
       type: Boolean,
       default: true,

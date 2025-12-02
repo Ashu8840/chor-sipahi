@@ -21,7 +21,10 @@ const server = http.createServer(app);
 // Initialize Socket.IO
 const io = new Server(server, {
   cors: {
-    origin: process.env.FRONTEND_URL || "http://localhost:5173",
+    origin: [
+      process.env.FRONTEND_URL || "http://localhost:5173",
+      "http://localhost:8081",
+    ],
     methods: ["GET", "POST"],
     credentials: true,
   },
@@ -41,6 +44,7 @@ app.use(
 // CORS - Remove trailing slash to fix CORS error
 const allowedOrigins = [
   "http://localhost:5173",
+  "http://localhost:8081",
   "https://chor-sipahi-br9m.vercel.app",
   process.env.FRONTEND_URL,
 ].filter(Boolean);

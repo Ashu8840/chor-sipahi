@@ -4,7 +4,7 @@ import { v4 as uuidv4 } from "uuid";
 
 export const createRoom = async (req, res) => {
   try {
-    const { name, mode, isPublic, passkey } = req.body;
+    const { name, mode, isPublic, passkey, gameType } = req.body;
 
     const roomId = uuidv4();
 
@@ -12,6 +12,7 @@ export const createRoom = async (req, res) => {
       roomId,
       name,
       mode,
+      gameType: gameType || "chor-sipahi",
       isPublic: isPublic !== false,
       host: req.userId,
       players: [
@@ -41,6 +42,7 @@ export const createRoom = async (req, res) => {
         roomId: room.roomId,
         name: room.name,
         mode: room.mode,
+        gameType: room.gameType,
         isPublic: room.isPublic,
         hasPasskey: !!room.passkey,
         maxPlayers: room.maxPlayers,
@@ -80,6 +82,7 @@ export const getRooms = async (req, res) => {
         roomId: room.roomId,
         name: room.name,
         mode: room.mode,
+        gameType: room.gameType,
         host: room.host,
         playerCount: room.players.length,
         maxPlayers: room.maxPlayers,
@@ -119,6 +122,7 @@ export const getRoom = async (req, res) => {
         roomId: room.roomId,
         name: room.name,
         mode: room.mode,
+        gameType: room.gameType,
         isPublic: room.isPublic,
         host: room.host,
         players: room.players,

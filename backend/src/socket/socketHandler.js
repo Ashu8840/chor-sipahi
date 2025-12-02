@@ -5,6 +5,7 @@ import User from "../models/User.model.js";
 import GameEngine from "../services/gameEngine.service.js";
 import matchmakingService from "../services/matchmaking.service.js";
 import logger from "../config/logger.js";
+import { bingoHandler } from "./bingoHandler.js";
 
 const activeConnections = new Map();
 const roomTimers = new Map();
@@ -88,6 +89,9 @@ export const initializeSocket = (io) => {
   io.on("connection", (socket) => {
     logger.info(`User connected: ${socket.username} (${socket.id})`);
 
+    // Initialize Bingo handlers
+    bingoHandler(io, socket);
+
     activeConnections.set(socket.userId, socket.id);
 
     socket.on("join_room", async ({ roomId, passkey }) => {
@@ -98,14 +102,19 @@ export const initializeSocket = (io) => {
           `${socket.username} joining room ${roomId}, socket ID: ${socket.id}`
         );
 
+        // Fetch room WITH passkey field for validation
         const room = await Room.findOne({ roomId }).select("+passkey");
 
         if (!room) {
           return socket.emit("error", { message: "Room not found" });
         }
 
-        // Check if room has a passkey
-        if (room.passkey) {
+        const playerExists = room.players.some(
+          (p) => p.userId.toString() === socket.userId
+        );
+
+        // Check if room has a passkey (only if player not already in room)
+        if (!playerExists && room.passkey) {
           // Passkey is required - check if provided
           if (!passkey) {
             return socket.emit("error", { message: "Passkey required" });
@@ -117,10 +126,6 @@ export const initializeSocket = (io) => {
             return socket.emit("error", { message: "Invalid passkey" });
           }
         }
-
-        const playerExists = room.players.some(
-          (p) => p.userId.toString() === socket.userId
-        );
 
         if (!playerExists && !room.isFull()) {
           await room.addPlayer({

@@ -323,8 +323,13 @@ function CreateRoomModal({ isOpen, onClose, onSuccess, initialMode = "chat" }) {
   const [formData, setFormData] = useState({
     name: "",
     mode: initialMode,
+    gameType: "chor-sipahi",
     isPublic: true,
     passkey: "",
+    bingoSettings: {
+      gridSize: 5,
+      maxPlayers: 2,
+    },
   });
   const [loading, setLoading] = useState(false);
   const { setCurrentRoom } = useGameStore();
@@ -380,6 +385,73 @@ function CreateRoomModal({ isOpen, onClose, onSuccess, initialMode = "chat" }) {
             <option value="video">Video Room</option>
           </select>
         </div>
+
+        <div>
+          <label className="block text-sm font-medium mb-2">Game Type</label>
+          <select
+            value={formData.gameType}
+            onChange={(e) =>
+              setFormData({ ...formData, gameType: e.target.value })
+            }
+            className="input-field"
+          >
+            <option value="chor-sipahi">Chor Sipahi</option>
+            <option value="bingo">Bingo</option>
+          </select>
+        </div>
+
+        {/* Bingo-specific settings */}
+        {formData.gameType === "bingo" && (
+          <>
+            <div>
+              <label className="block text-sm font-medium mb-2">
+                Grid Size
+              </label>
+              <select
+                value={formData.bingoSettings.gridSize}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    bingoSettings: {
+                      ...formData.bingoSettings,
+                      gridSize: parseInt(e.target.value),
+                    },
+                  })
+                }
+                className="input-field"
+              >
+                <option value="5">5x5 (25 numbers)</option>
+                <option value="6">6x6 (36 numbers)</option>
+                <option value="7">7x7 (49 numbers)</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-2">
+                Max Players
+              </label>
+              <select
+                value={formData.bingoSettings.maxPlayers}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    bingoSettings: {
+                      ...formData.bingoSettings,
+                      maxPlayers: parseInt(e.target.value),
+                    },
+                  })
+                }
+                className="input-field"
+              >
+                <option value="2">2 Players</option>
+                <option value="3">3 Players</option>
+                <option value="4">4 Players</option>
+                <option value="5">5 Players</option>
+                <option value="6">6 Players</option>
+              </select>
+            </div>
+          </>
+        )}
 
         <div>
           <label className="flex items-center space-x-2">

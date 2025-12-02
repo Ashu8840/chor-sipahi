@@ -1,53 +1,62 @@
-# 🎭 Chor-Sipahi - Multiplayer Game Platform
+# 🎭 Chor-Sipahi & Bingo - Multiplayer Game Platform
 
-A full-featured online multiplayer platform for the classic Indian game of bluff, detection, and strategy! Complete with authentication, matchmaking, leaderboards, match history, and real-time gameplay.
+A full-featured online multiplayer platform featuring two exciting games: the classic Indian Chor-Sipahi (Thief-Police) game and the popular Bingo game! Complete with authentication, real-time video chat, leaderboards, match history, and smooth gameplay.
 
-## 🎮 About the Game
+## 🎮 Games Available
 
-Chor-Sipahi (Thief-Police) is a beloved Indian game that combines mystery, excitement, luck, and psychological play. Four players are secretly assigned roles, and the Sipahi (Police) must identify who the Chor (Thief) is while the Chor tries to hide their identity through clever bluffing.
+### 1. 🎭 Chor-Sipahi (Thief-Police)
 
-### 👥 Game Roles
+A beloved Indian game that combines mystery, excitement, luck, and psychological play. Four players are secretly assigned roles, and the Sipahi (Police) must identify who the Chor (Thief) is while the Chor tries to hide their identity through clever bluffing.
+
+#### 👥 Game Roles
 
 - **👑 Raja (King)**: The highest authority - Always earns 1000 points
-- **📜 Mantri (Minister)**: Helper of the Raja - Always earns 800 points
-- **👮 Sipahi (Police)**: Must identify the Chor - Earns 500 points if correct, 0 if wrong
-- **🦹 Chor (Thief)**: Must hide their identity - Earns 0 points if caught, 1000 if they escape
+- **📜 Mantri (Minister)**: Helper of the Raja - Always earns 500 points
+- **👮 Sipahi (Police)**: Must identify the Chor - Earns 300 points if correct, 0 if wrong
+- **🦹 Chor (Thief)**: Must hide their identity - Earns 0 points if caught, 300 if they escape
 
-### 🎯 How to Play
+### 2. 🎲 Bingo
 
-1. **Join a Room**: Create a new room or join an existing one (4 players required)
-2. **Role Assignment**: Roles are randomly and secretly assigned to each player
-3. **Reveal Phase**: Raja and Mantri reveal their roles to everyone
-4. **Detection Phase**: Sipahi observes players and tries to identify the Chor
-5. **Bluffing Phase**: Chor tries to act innocent and mislead the Sipahi
-6. **Guess**: Sipahi selects who they think is the Chor
-7. **Round Result**: All roles are revealed and points are awarded
-8. **Multiple Rounds**: Play 10 rounds - highest total score wins!
+A turn-based multiplayer Bingo game where players race to complete 5 lines (rows, columns, or diagonals) on their 5x5 boards.
+
+#### 🎯 How to Play Bingo
+
+1. **Setup**: Each player creates a board with numbers 1-25 (use Auto-Fill for quick setup)
+2. **Ready Up**: Submit your board when satisfied
+3. **Game Start**: Host starts the game when all players are ready
+4. **Turns**: Players take turns selecting numbers from their boards
+5. **Marking**: Selected numbers are marked for all players
+6. **Win Condition**: First player to complete 5 lines (any combination of rows, columns, diagonals)
+7. **Call Bingo**: Click "Call BINGO!" when you have 5 complete lines
+8. **Validation**: Server validates your claim - if valid, you win! 🎉
 
 ## ✨ Platform Features
 
 ### 🔐 Authentication System
 
-- User registration with email verification
-- Secure JWT-based authentication
+- User registration and secure login
+- JWT-based authentication
 - Profile management with avatar uploads
-- Password reset functionality
+- Session management
 
 ### 🎲 Game Modes
 
-- **Random Chat Match**: Instant text-based gameplay with quick room creation
-- **Video Room Match**: Create video-enabled rooms where all 4 players can see each other via webcam
-- **Private Rooms**: Create password-protected rooms for friends
+- **Chor-Sipahi**: 4-player role-based deduction game
+- **Bingo**: 2+ player turn-based number selection game
+- **Chat Only**: Text-based gameplay
+- **Video Rooms**: Play with live video chat!
+- **Private Rooms**: Password-protected rooms for friends
 - **Public Rooms**: Join open rooms with available slots
 
-### 📹 Video Call Feature (New!)
+### 📹 Video Call Feature
 
 When you create or join a **Video Room**, the game includes live video streaming:
 
-- **4 Camera Windows**: Each player's webcam appears in a corner of the screen
-- **In-Game Controls**: Mute/unmute microphone and enable/disable camera during gameplay
-- **WebRTC Technology**: Peer-to-peer video connections for low latency
-- **Full Game Integration**: Video windows stay visible in both lobby and game screens
+- **Live Camera Windows**: See all players' webcams during gameplay
+- **Draggable Windows**: Move video windows anywhere on screen
+- **In-Game Controls**: Mute/unmute microphone and enable/disable camera
+- **WebRTC Technology**: Peer-to-peer video for low latency
+- **Client-side Controls**: Mute/hide remote players' audio/video on your end
 
 **Note**: Your browser will request camera and microphone permissions when joining a video room.
 
