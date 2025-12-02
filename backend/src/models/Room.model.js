@@ -6,7 +6,7 @@ const roomSchema = new mongoose.Schema(
     roomId: {
       type: String,
       required: true,
-      unique: true,
+      unique: true, // This creates an index automatically
     },
     name: {
       type: String,
@@ -63,6 +63,8 @@ const roomSchema = new mongoose.Schema(
         avatar: String,
         socketId: String,
         isReady: { type: Boolean, default: false },
+        connected: { type: Boolean, default: true },
+        lastActivity: { type: Date, default: Date.now },
         joinedAt: { type: Date, default: Date.now },
       },
     ],
@@ -103,6 +105,14 @@ const roomSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+// Indexes for optimized queries (200+ concurrent users)
+// Note: roomId already has unique index from schema definition
+roomSchema.index({ status: 1, gameType: 1 }); // Filter active games
+roomSchema.index({ host: 1 }); // Host queries
+roomSchema.index({ "players.userId": 1 }); // Player membership lookups
+roomSchema.index({ createdAt: -1 }); // Recent rooms
+roomSchema.index({ status: 1, createdAt: -1 }); // Compound for lobby listing
 
 roomSchema.pre("save", async function (next) {
   if (!this.isModified("passkey") || !this.passkey) return next();

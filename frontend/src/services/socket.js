@@ -6,6 +6,9 @@ class SocketService {
   constructor() {
     this.socket = null;
     this.listeners = new Map();
+    this.currentRoomId = null;
+    this.reconnectAttempts = 0;
+    this.maxReconnectAttempts = 5;
   }
 
   connect(token) {
@@ -14,14 +17,42 @@ class SocketService {
     this.socket = io(SOCKET_URL, {
       auth: { token },
       transports: ["websocket", "polling"],
+      reconnection: true,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+      reconnectionAttempts: this.maxReconnectAttempts,
     });
 
     this.socket.on("connect", () => {
       console.log("Socket connected:", this.socket.id);
+      this.reconnectAttempts = 0;
+
+      // Auto-rejoin room if we were in one before disconnect
+      if (this.currentRoomId) {
+        console.log("Auto-rejoining room:", this.currentRoomId);
+        this.requestReconnect(this.currentRoomId);
+      }
     });
 
     this.socket.on("disconnect", (reason) => {
       console.log("Socket disconnected:", reason);
+
+      if (reason === "io server disconnect") {
+        // Server disconnected us, manually reconnect
+        this.socket.connect();
+      }
+      // Auto-reconnect is handled by socket.io for other cases
+    });
+
+    this.socket.on("reconnect_attempt", (attemptNumber) => {
+      this.reconnectAttempts = attemptNumber;
+      console.log(
+        `Reconnection attempt ${attemptNumber}/${this.maxReconnectAttempts}`
+      );
+    });
+
+    this.socket.on("reconnect_failed", () => {
+      console.error("Failed to reconnect after maximum attempts");
     });
 
     this.socket.on("error", (error) => {
@@ -70,11 +101,26 @@ class SocketService {
   }
 
   joinRoom(roomId, passkey) {
+    this.currentRoomId = roomId;
     this.emit("join_room", { roomId, passkey });
   }
 
   leaveRoom(roomId) {
+    this.currentRoomId = null;
     this.emit("leave_room", { roomId });
+  }
+
+  requestReconnect(roomId) {
+    this.currentRoomId = roomId;
+    this.emit("request_reconnect", { roomId });
+  }
+
+  getCurrentRoomId() {
+    return this.currentRoomId;
+  }
+
+  setCurrentRoomId(roomId) {
+    this.currentRoomId = roomId;
   }
 
   playerReady(roomId, isReady) {

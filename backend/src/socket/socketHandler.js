@@ -6,17 +6,14 @@ import GameEngine from "../services/gameEngine.service.js";
 import matchmakingService from "../services/matchmaking.service.js";
 import logger from "../config/logger.js";
 import { bingoHandler } from "./bingoHandler.js";
+import memoryManager from "../utils/memoryManager.js";
 
-const activeConnections = new Map();
-const roomTimers = new Map();
+// Use memory manager for efficient connection handling
+const activeConnections = memoryManager.activeConnections;
+const roomTimers = memoryManager.roomTimers;
 
 // Helper function to start room deletion timer
 function startRoomTimer(io, roomId, timeoutMinutes, reason) {
-  // Clear existing timer if any
-  if (roomTimers.has(roomId)) {
-    clearTimeout(roomTimers.get(roomId));
-  }
-
   const timer = setTimeout(async () => {
     try {
       const room = await Room.findOne({ roomId });
@@ -32,7 +29,7 @@ function startRoomTimer(io, roomId, timeoutMinutes, reason) {
 
         // Remove all players from the room
         await Room.deleteOne({ roomId });
-        roomTimers.delete(roomId);
+        memoryManager.clearRoomTimer(roomId);
         logger.info(`Room ${roomId} auto-deleted: ${reason}`);
       }
     } catch (error) {
@@ -40,7 +37,7 @@ function startRoomTimer(io, roomId, timeoutMinutes, reason) {
     }
   }, timeoutMinutes * 60 * 1000);
 
-  roomTimers.set(roomId, timer);
+  memoryManager.setRoomTimer(roomId, timer);
   logger.info(
     `Room timer started for ${roomId}: ${timeoutMinutes} minutes (${reason})`
   );
@@ -48,11 +45,8 @@ function startRoomTimer(io, roomId, timeoutMinutes, reason) {
 
 // Helper function to clear room timer
 function clearRoomTimer(roomId) {
-  if (roomTimers.has(roomId)) {
-    clearTimeout(roomTimers.get(roomId));
-    roomTimers.delete(roomId);
-    logger.info(`Room timer cleared for ${roomId}`);
-  }
+  memoryManager.clearRoomTimer(roomId);
+  logger.info(`Room timer cleared for ${roomId}`);
 }
 
 export const initializeSocket = (io) => {
@@ -89,10 +83,89 @@ export const initializeSocket = (io) => {
   io.on("connection", (socket) => {
     logger.info(`User connected: ${socket.username} (${socket.id})`);
 
-    // Initialize Bingo handlers
-    bingoHandler(io, socket);
+    // Track connection with memory manager
+    memoryManager.addConnection(socket.userId, socket.id);
 
-    activeConnections.set(socket.userId, socket.id);
+    // Initialize Bingo handlers with error boundary
+    try {
+      bingoHandler(io, socket);
+    } catch (error) {
+      logger.error(
+        `Error initializing bingo handler for ${socket.username}:`,
+        error
+      );
+    }
+
+    // Handle reconnection - restore player's game state
+    socket.on("request_reconnect", async ({ roomId }) => {
+      try {
+        logger.info(
+          `${socket.username} requesting reconnect to room ${roomId}`
+        );
+
+        // Clear reconnection timer if exists
+        memoryManager.clearReconnectTimer(socket.userId);
+
+        const room = await Room.findOne({ roomId });
+        if (!room) {
+          return socket.emit("error", { message: "Room not found" });
+        }
+
+        const playerIndex = room.players.findIndex(
+          (p) => p.userId.toString() === socket.userId
+        );
+
+        if (playerIndex === -1) {
+          return socket.emit("error", { message: "You are not in this room" });
+        }
+
+        // Update player connection status
+        room.players[playerIndex].connected = true;
+        room.players[playerIndex].socketId = socket.id;
+        room.players[playerIndex].lastActivity = new Date();
+        await room.save();
+
+        // Rejoin socket room and track connection
+        socket.join(roomId);
+        memoryManager.addConnection(socket.userId, socket.id, roomId);
+
+        // Send current room state
+        socket.emit("reconnect_success", {
+          room: room.toObject(),
+          message: "Reconnected successfully",
+        });
+
+        // Notify others
+        socket.to(roomId).emit("player_reconnected", {
+          userId: socket.userId,
+          username: socket.username,
+        });
+
+        // If Bingo game, restore game state
+        if (room.gameType === "bingo") {
+          const BingoGame = (await import("../models/BingoGame.model.js"))
+            .default;
+          const game = await BingoGame.findOne({ roomId: room._id });
+          if (game) {
+            const playerGameIndex = game.players.findIndex(
+              (p) => p.userId === socket.userId
+            );
+            if (playerGameIndex !== -1) {
+              game.players[playerGameIndex].connected = true;
+              game.players[playerGameIndex].socketId = socket.id;
+              game.players[playerGameIndex].lastActivity = new Date();
+              await game.save();
+            }
+            socket.emit("bingo:game_state", game);
+          }
+        }
+
+        logger.info(`${socket.username} successfully reconnected to ${roomId}`);
+      } catch (error) {
+        logger.error("Reconnect error:", error);
+        socket.emit("error", { message: "Reconnection failed" });
+      }
+    });
 
     socket.on("join_room", async ({ roomId, passkey }) => {
       try {
@@ -112,6 +185,32 @@ export const initializeSocket = (io) => {
         const playerExists = room.players.some(
           (p) => p.userId.toString() === socket.userId
         );
+
+        // If player already exists, this is a reconnection
+        if (playerExists) {
+          const playerIndex = room.players.findIndex(
+            (p) => p.userId.toString() === socket.userId
+          );
+          room.players[playerIndex].connected = true;
+          room.players[playerIndex].socketId = socket.id;
+          room.players[playerIndex].lastActivity = new Date();
+          await room.save();
+
+          socket.join(roomId);
+          socket.currentRoom = roomId;
+
+          const sanitizedRoom = await Room.findOne({ roomId }).select(
+            "-passkey"
+          );
+          socket.emit("joined_room", {
+            room: sanitizedRoom,
+            reconnected: true,
+          });
+          io.to(roomId).emit("room_updated", sanitizedRoom);
+
+          logger.info(`${socket.username} reconnected to room ${roomId}`);
+          return;
+        }
 
         // Check if room has a passkey (only if player not already in room)
         if (!playerExists && room.passkey) {
@@ -948,144 +1047,225 @@ export const initializeSocket = (io) => {
 
     socket.on("disconnect", async () => {
       try {
-        activeConnections.delete(socket.userId);
+        logger.info(`User disconnected: ${socket.username} (${socket.id})`);
 
+        // Remove connection tracking
+        memoryManager.removeConnection(socket.userId);
         matchmakingService.removeFromQueue(socket.userId);
 
         if (socket.currentRoom) {
           const room = await Room.findOne({ roomId: socket.currentRoom });
 
           if (room) {
-            // If game is in progress, end it and declare winner
-            if (room.status === "playing") {
-              logger.info(
-                `Player ${socket.username} disconnected during active game in room ${socket.currentRoom}`
-              );
+            // Mark player as disconnected but don't remove them yet
+            const playerIndex = room.players.findIndex(
+              (p) => p.userId.toString() === socket.userId
+            );
 
-              // Find the winner (highest score)
-              const scores = room.gameState?.scores || {};
-              let highestScore = -1;
-              let winnerId = null;
-              let winnerName = null;
-
-              Object.entries(scores).forEach(([userId, score]) => {
-                if (score > highestScore) {
-                  highestScore = score;
-                  winnerId = userId;
-                }
-              });
-
-              // Get winner details
-              if (winnerId) {
-                const winnerPlayer = room.players.find(
-                  (p) => p.userId.toString() === winnerId
-                );
-                winnerName =
-                  winnerPlayer?.displayName ||
-                  winnerPlayer?.username ||
-                  "Unknown";
-              }
-
-              // End the game
-              room.status = "finished";
+            if (playerIndex !== -1) {
+              room.players[playerIndex].connected = false;
+              room.players[playerIndex].lastActivity = new Date();
               await room.save();
 
-              // Complete Match document
-              if (room.gameState && room.gameState.matchId) {
-                try {
-                  const match = await Match.findById(room.gameState.matchId);
-                  if (match) {
-                    const sortedPlayers = room.players
-                      .map((p) => ({
-                        ...p,
-                        finalScore: scores[p.userId.toString()] || 0,
-                      }))
-                      .sort((a, b) => b.finalScore - a.finalScore);
-
-                    match.players = sortedPlayers.map((player, index) => ({
-                      userId: player.userId,
-                      username: player.username,
-                      displayName: player.displayName,
-                      finalScore: player.finalScore,
-                      placement: index + 1,
-                    }));
-
-                    match.winner = winnerId
-                      ? {
-                          userId: winnerId,
-                          username: winnerName,
-                          displayName: winnerName,
-                          finalScore: highestScore,
-                        }
-                      : null;
-
-                    match.status = "abandoned";
-                    match.endTime = new Date();
-                    match.duration = Math.floor(
-                      (match.endTime - match.startTime) / 1000
-                    );
-
-                    await match.save();
-                    logger.info(
-                      `Match ${match._id} marked as abandoned due to disconnect`
-                    );
-                  }
-                } catch (matchErr) {
-                  logger.error("Failed to save match on disconnect:", matchErr);
-                }
-              }
-
-              // Notify all players that game ended
-              io.to(socket.currentRoom).emit("game_finished", {
-                reason: "player_disconnected",
-                winner: winnerId
-                  ? {
-                      userId: winnerId,
-                      username: winnerName,
-                      score: highestScore,
-                    }
-                  : null,
-                finalScores: scores,
-                message: `Game ended because ${socket.username} left the room`,
+              // Notify others about disconnection
+              socket.to(socket.currentRoom).emit("player_disconnected", {
+                userId: socket.userId,
+                username: socket.username,
+                temporary: true, // Indicate this might be temporary
               });
 
               logger.info(
-                `Game ended in room ${socket.currentRoom}. Winner: ${winnerName} with ${highestScore} points`
+                `${socket.username} marked as disconnected in room ${socket.currentRoom}`
               );
             }
 
-            await room.removePlayer(socket.userId);
-
-            if (room.players.length === 0) {
-              await Room.deleteOne({ roomId: socket.currentRoom });
-              clearRoomTimer(socket.currentRoom);
-              logger.info(
-                `Room ${socket.currentRoom} deleted (empty after disconnect)`
-              );
-            } else {
-              // Check if disconnected player was the host
-              const isHost = room.host.toString() === socket.userId;
-
-              if (isHost) {
-                // Host disconnected - disband room
-                io.to(socket.currentRoom).emit("room_disbanded", {
-                  reason: "host_disconnected",
-                  message: "Room disbanded: Host has disconnected",
-                });
-                await Room.deleteOne({ roomId: socket.currentRoom });
-                clearRoomTimer(socket.currentRoom);
-                logger.info(
-                  `Room ${socket.currentRoom} disbanded because host disconnected`
+            // For Bingo games, mark player as disconnected
+            if (room.gameType === "bingo") {
+              const BingoGame = (await import("../models/BingoGame.model.js"))
+                .default;
+              const game = await BingoGame.findOne({ roomId: room._id });
+              if (game) {
+                const gamePlayerIndex = game.players.findIndex(
+                  (p) => p.userId === socket.userId
                 );
-              } else {
-                const updatedRoom = await Room.findOne({
-                  roomId: socket.currentRoom,
-                }).select("-passkey");
-                if (updatedRoom) {
-                  io.to(socket.currentRoom).emit("room_updated", updatedRoom);
+                if (gamePlayerIndex !== -1) {
+                  game.players[gamePlayerIndex].connected = false;
+                  game.players[gamePlayerIndex].lastActivity = new Date();
+                  await game.save();
                 }
               }
             }
+
+            // Set timeout to actually remove player if they don't reconnect
+            // Give them 2 minutes to reconnect
+            const reconnectTimer = setTimeout(async () => {
+              try {
+                const updatedRoom = await Room.findOne({
+                  roomId: socket.currentRoom,
+                });
+                if (!updatedRoom) return;
+
+                const player = updatedRoom.players.find(
+                  (p) => p.userId.toString() === socket.userId
+                );
+
+                // If player is still disconnected after timeout
+                if (player && !player.connected) {
+                  logger.info(
+                    `${socket.username} did not reconnect, ending game in room ${socket.currentRoom}`
+                  );
+
+                  // If game is in progress, end it and declare winner
+                  if (updatedRoom.status === "playing") {
+                    logger.info(
+                      `Player ${socket.username} disconnected during active game in room ${socket.currentRoom}`
+                    );
+
+                    // Find the winner (highest score)
+                    const scores = room.gameState?.scores || {};
+                    let highestScore = -1;
+                    let winnerId = null;
+                    let winnerName = null;
+
+                    Object.entries(scores).forEach(([userId, score]) => {
+                      if (score > highestScore) {
+                        highestScore = score;
+                        winnerId = userId;
+                      }
+                    });
+
+                    // Get winner details
+                    if (winnerId) {
+                      const winnerPlayer = room.players.find(
+                        (p) => p.userId.toString() === winnerId
+                      );
+                      winnerName =
+                        winnerPlayer?.displayName ||
+                        winnerPlayer?.username ||
+                        "Unknown";
+                    }
+
+                    // End the game
+                    room.status = "finished";
+                    await room.save();
+
+                    // Complete Match document
+                    if (room.gameState && room.gameState.matchId) {
+                      try {
+                        const match = await Match.findById(
+                          room.gameState.matchId
+                        );
+                        if (match) {
+                          const sortedPlayers = room.players
+                            .map((p) => ({
+                              ...p,
+                              finalScore: scores[p.userId.toString()] || 0,
+                            }))
+                            .sort((a, b) => b.finalScore - a.finalScore);
+
+                          match.players = sortedPlayers.map(
+                            (player, index) => ({
+                              userId: player.userId,
+                              username: player.username,
+                              displayName: player.displayName,
+                              finalScore: player.finalScore,
+                              placement: index + 1,
+                            })
+                          );
+
+                          match.winner = winnerId
+                            ? {
+                                userId: winnerId,
+                                username: winnerName,
+                                displayName: winnerName,
+                                finalScore: highestScore,
+                              }
+                            : null;
+
+                          match.status = "abandoned";
+                          match.endTime = new Date();
+                          match.duration = Math.floor(
+                            (match.endTime - match.startTime) / 1000
+                          );
+
+                          await match.save();
+                          logger.info(
+                            `Match ${match._id} marked as abandoned due to disconnect`
+                          );
+                        }
+                      } catch (matchErr) {
+                        logger.error(
+                          "Failed to save match on disconnect:",
+                          matchErr
+                        );
+                      }
+                    }
+
+                    // Notify all players that game ended
+                    io.to(socket.currentRoom).emit("game_finished", {
+                      reason: "player_disconnected",
+                      winner: winnerId
+                        ? {
+                            userId: winnerId,
+                            username: winnerName,
+                            score: highestScore,
+                          }
+                        : null,
+                      finalScores: scores,
+                      message: `Game ended because ${socket.username} left the room`,
+                    });
+
+                    logger.info(
+                      `Game ended in room ${socket.currentRoom}. Winner: ${winnerName} with ${highestScore} points`
+                    );
+                  }
+
+                  await room.removePlayer(socket.userId);
+
+                  if (room.players.length === 0) {
+                    await Room.deleteOne({ roomId: socket.currentRoom });
+                    clearRoomTimer(socket.currentRoom);
+                    logger.info(
+                      `Room ${socket.currentRoom} deleted (empty after disconnect)`
+                    );
+                  } else {
+                    // Check if disconnected player was the host
+                    const isHost = room.host.toString() === socket.userId;
+
+                    if (isHost) {
+                      // Host disconnected - disband room
+                      io.to(socket.currentRoom).emit("room_disbanded", {
+                        reason: "host_disconnected",
+                        message: "Room disbanded: Host has disconnected",
+                      });
+                      await Room.deleteOne({ roomId: socket.currentRoom });
+                      clearRoomTimer(socket.currentRoom);
+                      logger.info(
+                        `Room ${socket.currentRoom} disbanded because host disconnected`
+                      );
+                    } else {
+                      const updatedRoom = await Room.findOne({
+                        roomId: socket.currentRoom,
+                      }).select("-passkey");
+                      if (updatedRoom) {
+                        io.to(socket.currentRoom).emit(
+                          "room_updated",
+                          updatedRoom
+                        );
+                      }
+                    }
+                  }
+                }
+              } catch (timeoutError) {
+                logger.error(
+                  "Error in reconnect timeout handler:",
+                  timeoutError
+                );
+              }
+            }, 2 * 60 * 1000); // 2 minutes
+
+            // Track reconnection timer with memory manager
+            memoryManager.setReconnectTimer(socket.userId, reconnectTimer);
           }
         }
 

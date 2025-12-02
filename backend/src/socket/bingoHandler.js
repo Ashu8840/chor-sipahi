@@ -125,12 +125,16 @@ export const bingoHandler = (io, socket) => {
       if (!game) return;
 
       game.status = "playing";
-      game.currentTurnIndex = 0; // Start with first player
+      // Randomly select first player
+      const randomIndex = Math.floor(Math.random() * game.players.length);
+      game.currentTurnIndex = randomIndex;
       game.drawnNumbers = [];
       await game.save();
 
       io.to(roomId).emit("bingo:game_started", {
-        currentTurn: game.players[0].userId,
+        currentTurn: game.players[randomIndex].userId,
+        firstPlayerIndex: randomIndex,
+        firstPlayerName: game.players[randomIndex].username,
       });
     } catch (error) {
       logger.error("Bingo start error:", error);

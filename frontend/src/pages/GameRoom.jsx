@@ -66,9 +66,32 @@ export default function GameRoom() {
     navigate("/lobby");
   };
 
+  const handlePlayerDisconnected = ({ username, temporary }) => {
+    if (temporary) {
+      toast.info(`${username} disconnected. Waiting for reconnection...`);
+    }
+  };
+
+  const handlePlayerReconnected = ({ username }) => {
+    toast.success(`${username} reconnected!`);
+  };
+
+  const handleReconnectSuccess = ({ room, message }) => {
+    console.log("Reconnected successfully:", message);
+    setCurrentRoom(room);
+    toast.success(message);
+  };
+
   useEffect(() => {
     fetchRoomData();
-    socketService.joinRoom(roomId);
+
+    // Try to reconnect if we were in this room before
+    const savedRoomId = socketService.getCurrentRoomId();
+    if (savedRoomId === roomId) {
+      socketService.requestReconnect(roomId);
+    } else {
+      socketService.joinRoom(roomId);
+    }
 
     socketService.on("room_updated", handleRoomUpdated);
     socketService.on("can_start_game", () => setCanStartGame(true));
@@ -79,6 +102,9 @@ export default function GameRoom() {
     socketService.on("next_round", handleNextRound);
     socketService.on("game_finished", handleGameFinished);
     socketService.on("room_disbanded", handleRoomDisbanded);
+    socketService.on("player_disconnected", handlePlayerDisconnected);
+    socketService.on("player_reconnected", handlePlayerReconnected);
+    socketService.on("reconnect_success", handleReconnectSuccess);
     socketService.on("error", handleError);
 
     return () => {
@@ -91,6 +117,9 @@ export default function GameRoom() {
       socketService.off("next_round", handleNextRound);
       socketService.off("game_finished", handleGameFinished);
       socketService.off("room_disbanded", handleRoomDisbanded);
+      socketService.off("player_disconnected", handlePlayerDisconnected);
+      socketService.off("player_reconnected", handlePlayerReconnected);
+      socketService.off("reconnect_success", handleReconnectSuccess);
       socketService.off("error", handleError);
 
       // Don't emit can_start_game cleanup

@@ -6,8 +6,13 @@
   "type": "module",
   "scripts": {
     "start": "node src/server.js",
+    "start:prod": "node --max-old-space-size=4096 src/server.js",
     "dev": "nodemon src/server.js",
-    "test": "jest --coverage"
+    "test": "jest --coverage",
+    "pm2:start": "pm2 start src/server.js --name chor-sipahi-backend --node-args='--max-old-space-size=4096' -i max",
+    "pm2:stop": "pm2 stop chor-sipahi-backend",
+    "pm2:restart": "pm2 restart chor-sipahi-backend",
+    "pm2:logs": "pm2 logs chor-sipahi-backend"
   },
   "keywords": [
     "multiplayer",

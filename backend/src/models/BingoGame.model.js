@@ -24,6 +24,9 @@ const BingoGameSchema = new mongoose.Schema(
         username: { type: String, required: true },
         board: [[Number]], // Variable grid size
         ready: { type: Boolean, default: false },
+        connected: { type: Boolean, default: true },
+        socketId: { type: String },
+        lastActivity: { type: Date, default: Date.now },
       },
     ],
     drawnNumbers: [Number],
@@ -43,5 +46,11 @@ const BingoGameSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+// Indexes for optimized Bingo game queries
+BingoGameSchema.index({ roomId: 1 }); // Primary lookup by room
+BingoGameSchema.index({ gameStatus: 1 }); // Filter by status
+BingoGameSchema.index({ "players.userId": 1 }); // Player queries
+BingoGameSchema.index({ createdAt: -1 }); // Recent games
 
 export default mongoose.model("BingoGame", BingoGameSchema);

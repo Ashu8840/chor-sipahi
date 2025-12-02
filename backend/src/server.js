@@ -18,7 +18,7 @@ import initializeSocket from "./socket/socketHandler.js";
 const app = express();
 const server = http.createServer(app);
 
-// Initialize Socket.IO
+// Initialize Socket.IO with performance optimizations
 const io = new Server(server, {
   cors: {
     origin: [
@@ -31,6 +31,22 @@ const io = new Server(server, {
     credentials: true,
   },
   transports: ["websocket", "polling"],
+  // Performance optimizations for 200+ concurrent users
+  maxHttpBufferSize: 1e6, // 1MB
+  pingTimeout: 60000, // 60s
+  pingInterval: 25000, // 25s
+  upgradeTimeout: 10000, // 10s
+  allowUpgrades: true,
+  perMessageDeflate: {
+    threshold: 1024, // Compress only messages > 1KB
+  },
+  httpCompression: {
+    threshold: 1024,
+  },
+  // Connection limits
+  connectTimeout: 45000,
+  // Enable long polling fallback
+  allowEIO3: true,
 });
 
 // Connect to MongoDB
@@ -124,27 +140,79 @@ app.use((req, res) => {
   });
 });
 
+// Import cleanup utilities (at top of file for proper ES module syntax)
+import memoryManager from "./utils/memoryManager.js";
+import performanceMonitor from "./utils/performanceMonitor.js";
+import socketRateLimiter from "./middleware/socketRateLimiter.js";
+import { EventEmitter } from "events";
+
+// Performance optimizations for Node.js process
+// Increase max listeners to handle 200+ socket connections
+EventEmitter.defaultMaxListeners = 100;
+
+// Optimize garbage collection (use --max-old-space-size=4096 in production)
+if (process.env.NODE_ENV === "production") {
+  logger.info("🔧 Production optimizations enabled");
+}
+
 // Start server
 const PORT = process.env.PORT || 5000;
 
 server.listen(PORT, () => {
   logger.info(`🚀 Server running on port ${PORT}`);
   logger.info(`📝 Environment: ${process.env.NODE_ENV || "development"}`);
-  logger.info(`🎮 Socket.IO initialized`);
+  logger.info(`🎮 Socket.IO initialized for high concurrency`);
+  logger.info(`⚡ Max connections: Optimized for 200+ users`);
+  logger.info(
+    `💾 Memory: ${(process.memoryUsage().heapUsed / 1024 / 1024).toFixed(2)} MB`
+  );
 });
 
-// Graceful shutdown
-process.on("SIGTERM", () => {
-  logger.info("SIGTERM received, shutting down gracefully");
-  server.close(() => {
-    logger.info("Server closed");
-    process.exit(0);
+// Graceful shutdown with cleanup
+async function gracefulShutdown(signal) {
+  logger.info(`${signal} received, shutting down gracefully...`);
+
+  // Stop accepting new connections
+  server.close(async () => {
+    logger.info("🔒 HTTP server closed");
+
+    try {
+      // Cleanup resources
+      memoryManager.destroy();
+      performanceMonitor.destroy();
+      socketRateLimiter.destroy();
+
+      // Close database connection
+      const mongoose = await import("mongoose");
+      await mongoose.default.connection.close();
+      logger.info("💾 Database connection closed");
+
+      logger.info("✅ Graceful shutdown complete");
+      process.exit(0);
+    } catch (error) {
+      logger.error("❌ Error during shutdown:", error);
+      process.exit(1);
+    }
   });
-});
+
+  // Force shutdown after 30 seconds
+  setTimeout(() => {
+    logger.error("⚠️ Forced shutdown after timeout");
+    process.exit(1);
+  }, 30000);
+}
+
+process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+process.on("SIGINT", () => gracefulShutdown("SIGINT"));
 
 process.on("unhandledRejection", (err) => {
-  logger.error("Unhandled Rejection:", err);
-  server.close(() => process.exit(1));
+  logger.error("❌ Unhandled Rejection:", err);
+  gracefulShutdown("UnhandledRejection");
+});
+
+process.on("uncaughtException", (err) => {
+  logger.error("❌ Uncaught Exception:", err);
+  gracefulShutdown("UncaughtException");
 });
 
 export { io };

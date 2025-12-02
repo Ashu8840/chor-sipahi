@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -10,6 +10,8 @@ import {
   Shuffle,
   Trophy,
   Sparkles,
+  Maximize,
+  Minimize,
 } from "lucide-react";
 import Navbar from "../components/Navbar";
 import FloatingChat from "../components/FloatingChat";
@@ -60,9 +62,82 @@ export default function GamePanel() {
   const [showShuffleCard, setShowShuffleCard] = useState(false);
   const [showGuessCard, setShowGuessCard] = useState(false);
   const [winner, setWinner] = useState(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  // Audio ref for sound effects
+  const audioContextRef = useRef(null);
 
   const { user } = useAuthStore();
   const { currentRoom, setCurrentRoom, updateRoom } = useGameStore();
+
+  // Initialize audio context
+  useEffect(() => {
+    audioContextRef.current = new (window.AudioContext ||
+      window.webkitAudioContext)();
+    return () => {
+      if (
+        audioContextRef.current &&
+        audioContextRef.current.state !== "closed"
+      ) {
+        audioContextRef.current.close();
+      }
+    };
+  }, []);
+
+  // Fullscreen functions
+  const enterFullscreen = () => {
+    const elem = document.documentElement;
+    if (elem.requestFullscreen) {
+      elem
+        .requestFullscreen()
+        .catch((err) => console.log("Fullscreen error:", err));
+    } else if (elem.webkitRequestFullscreen) {
+      elem.webkitRequestFullscreen();
+    } else if (elem.msRequestFullscreen) {
+      elem.msRequestFullscreen();
+    }
+    setIsFullscreen(true);
+  };
+
+  const exitFullscreen = () => {
+    if (document.exitFullscreen) {
+      document.exitFullscreen();
+    } else if (document.webkitExitFullscreen) {
+      document.webkitExitFullscreen();
+    } else if (document.msExitFullscreen) {
+      document.msExitFullscreen();
+    }
+    setIsFullscreen(false);
+  };
+
+  const toggleFullscreen = () => {
+    if (isFullscreen) {
+      exitFullscreen();
+    } else {
+      enterFullscreen();
+    }
+  };
+
+  // Play sound effect
+  const playSound = (frequency = 600, duration = 0.15) => {
+    if (audioContextRef.current && audioContextRef.current.state !== "closed") {
+      const oscillator = audioContextRef.current.createOscillator();
+      const gainNode = audioContextRef.current.createGain();
+
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContextRef.current.destination);
+
+      oscillator.frequency.value = frequency;
+      gainNode.gain.setValueAtTime(0.3, audioContextRef.current.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(
+        0.01,
+        audioContextRef.current.currentTime + duration
+      );
+
+      oscillator.start(audioContextRef.current.currentTime);
+      oscillator.stop(audioContextRef.current.currentTime + duration);
+    }
+  };
 
   const handleError = (data) => {
     console.error("Socket error:", data);
@@ -222,6 +297,15 @@ export default function GamePanel() {
     setShowRoleCard(true);
     setGameState("playing");
 
+    // Play sound based on role
+    if (role === "Chor") {
+      playSound(300, 0.3); // Low tone for Chor
+    } else if (sipahi) {
+      playSound(800, 0.2); // High tone for Sipahi
+    } else {
+      playSound(600, 0.2); // Mid tone for others
+    }
+
     // Show guess card for Sipahi after role card disappears
     if (sipahi) {
       setTimeout(() => {
@@ -234,6 +318,7 @@ export default function GamePanel() {
 
   const handleRolesShuffled = ({ shufflerUserId: shuffler }) => {
     setShufflerUserId(shuffler);
+    playSound(700, 0.15); // Shuffle sound
     toast.success("Roles assigned!");
   };
 
@@ -361,10 +446,18 @@ export default function GamePanel() {
   });
 
   return (
-    <div className="min-h-screen bg-gray-950">
-      <Navbar />
+    <div
+      className={`min-h-screen bg-gray-950 ${
+        isFullscreen ? "fixed inset-0 z-50 overflow-hidden flex flex-col" : ""
+      }`}
+    >
+      {!isFullscreen && <Navbar />}
 
-      <div className="max-w-7xl mx-auto px-4 py-6">
+      <div
+        className={`${
+          isFullscreen ? "flex-1 overflow-y-auto" : "max-w-7xl mx-auto"
+        } px-4 py-6`}
+      >
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center space-x-4">
@@ -376,10 +469,27 @@ export default function GamePanel() {
               <span>Leave</span>
             </button>
             <div>
-              <h1 className="text-2xl font-bold">{currentRoom.name}</h1>
-              <p className="text-gray-400">Round {currentRound} / 10</p>
+              <h1
+                className={`font-bold ${isFullscreen ? "text-xl" : "text-2xl"}`}
+              >
+                {currentRoom.name}
+              </h1>
+              <p className="text-gray-400 text-sm">Round {currentRound} / 10</p>
             </div>
           </div>
+
+          {/* Fullscreen toggle */}
+          <button
+            onClick={toggleFullscreen}
+            className="p-2 rounded-lg bg-gray-800 hover:bg-gray-700 transition-colors"
+            title={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}
+          >
+            {isFullscreen ? (
+              <Minimize className="w-5 h-5" />
+            ) : (
+              <Maximize className="w-5 h-5" />
+            )}
+          </button>
         </div>
 
         <div className="grid lg:grid-cols-12 gap-6">
