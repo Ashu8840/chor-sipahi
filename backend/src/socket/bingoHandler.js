@@ -98,6 +98,9 @@ export const bingoHandler = (io, socket) => {
         username: socket.username,
       });
 
+      // Send updated game state to all players
+      io.to(roomId).emit("bingo:game_state", gameInstance);
+
       // Check if all players are ready to start
       if (
         gameInstance.players.every((p) => p.ready) &&
@@ -130,6 +133,9 @@ export const bingoHandler = (io, socket) => {
       game.currentTurnIndex = randomIndex;
       game.drawnNumbers = [];
       await game.save();
+
+      // Emit updated game state
+      io.to(roomId).emit("bingo:game_state", game);
 
       io.to(roomId).emit("bingo:game_started", {
         currentTurn: game.players[randomIndex].userId,

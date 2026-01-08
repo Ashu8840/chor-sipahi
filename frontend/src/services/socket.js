@@ -92,6 +92,11 @@ class SocketService {
     }
   }
 
+  once(event, callback) {
+    if (!this.socket) return;
+    this.socket.once(event, callback);
+  }
+
   emit(event, data) {
     if (!this.socket) {
       console.error("Socket not connected");

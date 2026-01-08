@@ -20,7 +20,7 @@ const roomSchema = new mongoose.Schema(
     },
     gameType: {
       type: String,
-      enum: ["chor-sipahi", "bingo"],
+      enum: ["chor-sipahi", "bingo", "uno"],
       default: "chor-sipahi",
     },
     bingoSettings: {
@@ -36,6 +36,14 @@ const roomSchema = new mongoose.Schema(
         max: 6,
       },
     },
+    unoSettings: {
+      maxPlayers: {
+        type: Number,
+        default: 4,
+        min: 2,
+        max: 10,
+      },
+    },
     isPublic: {
       type: Boolean,
       default: true,
@@ -48,7 +56,7 @@ const roomSchema = new mongoose.Schema(
       type: Number,
       default: 4,
       min: 2,
-      max: 4,
+      max: 10,
     },
     host: {
       type: mongoose.Schema.Types.ObjectId,
@@ -113,6 +121,11 @@ roomSchema.index({ host: 1 }); // Host queries
 roomSchema.index({ "players.userId": 1 }); // Player membership lookups
 roomSchema.index({ createdAt: -1 }); // Recent rooms
 roomSchema.index({ status: 1, createdAt: -1 }); // Compound for lobby listing
+
+// Indexes for cleanup queries (automatic 30-minute deletion)
+roomSchema.index({ status: 1, createdAt: 1 }); // Cleanup waiting rooms
+roomSchema.index({ status: 1, gameStartedAt: 1 }); // Cleanup playing rooms
+roomSchema.index({ status: 1, updatedAt: 1 }); // Cleanup finished rooms
 
 roomSchema.pre("save", async function (next) {
   if (!this.isModified("passkey") || !this.passkey) return next();

@@ -6,6 +6,7 @@ import GameEngine from "../services/gameEngine.service.js";
 import matchmakingService from "../services/matchmaking.service.js";
 import logger from "../config/logger.js";
 import { bingoHandler } from "./bingoHandler.js";
+import { unoHandler } from "./unoHandler.js";
 import memoryManager from "../utils/memoryManager.js";
 
 // Use memory manager for efficient connection handling
@@ -92,6 +93,16 @@ export const initializeSocket = (io) => {
     } catch (error) {
       logger.error(
         `Error initializing bingo handler for ${socket.username}:`,
+        error
+      );
+    }
+
+    // Initialize UNO handlers with error boundary
+    try {
+      unoHandler(io, socket);
+    } catch (error) {
+      logger.error(
+        `Error initializing uno handler for ${socket.username}:`,
         error
       );
     }

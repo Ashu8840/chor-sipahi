@@ -4,9 +4,13 @@ import { useEffect } from "react";
 import Landing from "./pages/Landing";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
+import GameSpace from "./pages/GameSpace";
 import Lobby from "./pages/Lobby";
 import GameRoom from "./pages/GameRoom";
 import GamePanel from "./pages/GamePanel";
+import UnoLobby from "./pages/UnoLobby";
+import UnoGame from "./pages/UnoGame";
+import BingoGame from "./components/BingoGame";
 import Profile from "./pages/Profile";
 import Leaderboard from "./pages/Leaderboard";
 import History from "./pages/History";
@@ -29,7 +33,7 @@ function App() {
     <Routes>
       <Route
         path="/"
-        element={isAuthenticated ? <Navigate to="/lobby" /> : <Landing />}
+        element={isAuthenticated ? <GameSpace /> : <Landing />}
       />
       <Route
         path="/login"
@@ -93,6 +97,30 @@ function App() {
         element={
           <PrivateRoute>
             <Admin />
+          </PrivateRoute>
+        }
+      />
+      <Route
+        path="/uno"
+        element={
+          <PrivateRoute>
+            <UnoLobby />
+          </PrivateRoute>
+        }
+      />
+      <Route
+        path="/uno/room/:roomId"
+        element={
+          <PrivateRoute>
+            <UnoGame />
+          </PrivateRoute>
+        }
+      />
+      <Route
+        path="/bingo"
+        element={
+          <PrivateRoute>
+            <Lobby />
           </PrivateRoute>
         }
       />

@@ -14,6 +14,7 @@ import leaderboardRoutes from "./routes/leaderboard.routes.js";
 import adminRoutes from "./routes/admin.routes.js";
 import reportRoutes from "./routes/report.routes.js";
 import initializeSocket from "./socket/socketHandler.js";
+import roomCleanupService from "./services/roomCleanup.service.js";
 
 const app = express();
 const server = http.createServer(app);
@@ -24,6 +25,7 @@ const io = new Server(server, {
     origin: [
       process.env.FRONTEND_URL || "http://localhost:5173",
       "http://localhost:8081",
+      "http://10.118.140.93:8081",
       "https://chor-sipahi.vercel.app",
       "https://chor-sipahi-br9m.vercel.app",
     ],
@@ -50,7 +52,18 @@ const io = new Server(server, {
 });
 
 // Connect to MongoDB
-connectDB();
+connectDB().then(async () => {
+  // Delete all existing rooms on startup
+  await roomCleanupService.deleteAllRooms();
+  
+  // Start automatic cleanup job (runs every 5 minutes)
+  roomCleanupService.startAutomaticCleanup();
+  
+  logger.info("✅ Room cleanup service initialized");
+}).catch((error) => {
+  logger.error("Database connection failed:", error);
+  process.exit(1);
+});
 
 // Security middleware
 app.use(
@@ -63,6 +76,7 @@ app.use(
 const allowedOrigins = [
   "http://localhost:5173",
   "http://localhost:8081",
+  "http://10.118.140.93:8081",
   "https://chor-sipahi.vercel.app",
   "https://chor-sipahi-br9m.vercel.app",
   process.env.FRONTEND_URL,
@@ -178,6 +192,7 @@ async function gracefulShutdown(signal) {
 
     try {
       // Cleanup resources
+      roomCleanupService.stopAutomaticCleanup();
       memoryManager.destroy();
       performanceMonitor.destroy();
       socketRateLimiter.destroy();

@@ -4,7 +4,15 @@ import { v4 as uuidv4 } from "uuid";
 
 export const createRoom = async (req, res) => {
   try {
-    const { name, mode, isPublic, passkey, gameType } = req.body;
+    const {
+      name,
+      mode,
+      isPublic,
+      passkey,
+      gameType,
+      bingoSettings,
+      unoSettings,
+    } = req.body;
 
     const roomId = uuidv4();
 
@@ -15,6 +23,7 @@ export const createRoom = async (req, res) => {
       gameType: gameType || "chor-sipahi",
       isPublic: isPublic !== false,
       host: req.userId,
+      maxPlayers: 4,
       players: [
         {
           userId: req.userId,
@@ -25,6 +34,26 @@ export const createRoom = async (req, res) => {
         },
       ],
     };
+
+    // Add bingo settings if game type is bingo
+    if (roomData.gameType === "bingo" && bingoSettings) {
+      roomData.bingoSettings = {
+        gridSize: bingoSettings.gridSize || 5,
+        maxPlayers: bingoSettings.maxPlayers || 2,
+      };
+      roomData.maxPlayers = bingoSettings.maxPlayers || 2;
+    }
+
+    if (roomData.gameType === "uno") {
+      const unoMaxPlayers = Math.min(
+        Math.max(unoSettings?.maxPlayers || roomData.maxPlayers, 2),
+        10
+      );
+      roomData.unoSettings = {
+        maxPlayers: unoMaxPlayers,
+      };
+      roomData.maxPlayers = unoMaxPlayers;
+    }
 
     if (passkey) {
       roomData.passkey = passkey;
@@ -46,8 +75,16 @@ export const createRoom = async (req, res) => {
         isPublic: room.isPublic,
         hasPasskey: !!room.passkey,
         maxPlayers: room.maxPlayers,
+        bingoSettings: room.bingoSettings,
+        unoSettings: room.unoSettings,
         players: room.players,
         status: room.status,
+        host: {
+          _id: req.userId,
+          username: req.user.username,
+          displayName: req.user.displayName,
+          avatar: req.user.avatar,
+        },
       },
     });
   } catch (error) {
@@ -62,34 +99,39 @@ export const createRoom = async (req, res) => {
 
 export const getRooms = async (req, res) => {
   try {
-    const { mode, status } = req.query;
+    const { mode, status, gameType } = req.query;
 
     const query = { isPublic: true };
     if (mode) query.mode = mode;
     if (status) query.status = status;
+    if (gameType) query.gameType = gameType;
 
-    // First get rooms WITH passkey to check if it exists
-    const roomsWithPasskey = await Room.find(query)
+    const rooms = await Room.find(query)
+      .populate("host", "username displayName avatar")
       .sort({ createdAt: -1 })
       .limit(50)
-      .select("+passkey")
-      .populate("host", "username displayName avatar");
+      .lean(); // Use lean() for better performance
 
+    const roomsList = rooms.map((room) => ({
+      roomId: room.roomId,
+      name: room.name,
+      mode: room.mode,
+      gameType: room.gameType,
+      host: room.host,
+      playerCount: room.players.length,
+      maxPlayers: room.maxPlayers,
+      bingoSettings: room.bingoSettings,
+      unoSettings: room.unoSettings,
+      status: room.status,
+      hasPasskey: !!room.passkey,
+      createdAt: room.createdAt,
+    }));
+
+    // Add cache headers to reduce requests
+    res.set('Cache-Control', 'public, max-age=2'); // Cache for 2 seconds
     res.json({
       success: true,
-      count: roomsWithPasskey.length,
-      rooms: roomsWithPasskey.map((room) => ({
-        roomId: room.roomId,
-        name: room.name,
-        mode: room.mode,
-        gameType: room.gameType,
-        host: room.host,
-        playerCount: room.players.length,
-        maxPlayers: room.maxPlayers,
-        status: room.status,
-        hasPasskey: !!room.passkey, // Now this will work correctly
-        createdAt: room.createdAt,
-      })),
+      rooms: roomsList,
     });
   } catch (error) {
     logger.error("Get rooms error:", error);
@@ -127,6 +169,7 @@ export const getRoom = async (req, res) => {
         host: room.host,
         players: room.players,
         maxPlayers: room.maxPlayers,
+        unoSettings: room.unoSettings,
         status: room.status,
         currentRound: room.currentRound,
         totalRounds: room.totalRounds,
@@ -176,9 +219,24 @@ export const joinRoom = async (req, res) => {
     );
 
     if (playerExists) {
-      return res.status(400).json({
-        success: false,
+      // Player already in room, return success with room data
+      const populatedRoom = await Room.findOne({ roomId }).populate("host", "username displayName avatar");
+      return res.json({
+        success: true,
         message: "Already in room",
+        room: {
+          roomId: populatedRoom.roomId,
+          name: populatedRoom.name,
+          mode: populatedRoom.mode,
+          gameType: populatedRoom.gameType,
+          bingoSettings: populatedRoom.bingoSettings,
+          unoSettings: populatedRoom.unoSettings,
+          host: populatedRoom.host,
+          players: populatedRoom.players,
+          maxPlayers: populatedRoom.maxPlayers,
+          status: populatedRoom.status,
+          hasPasskey: !!populatedRoom.passkey,
+        },
       });
     }
 
@@ -208,15 +266,23 @@ export const joinRoom = async (req, res) => {
     });
 
     logger.info(`User ${req.user.username} joined room ${roomId}`);
+    const populatedRoom = await Room.findOne({ roomId }).populate("host", "username displayName avatar");
 
     res.json({
       success: true,
       message: "Joined room successfully",
       room: {
-        roomId: room.roomId,
-        name: room.name,
-        mode: room.mode,
-        players: room.players,
+        roomId: populatedRoom.roomId,
+        name: populatedRoom.name,
+        mode: populatedRoom.mode,
+        gameType: populatedRoom.gameType,
+        bingoSettings: populatedRoom.bingoSettings,
+        unoSettings: populatedRoom.unoSettings,
+        host: populatedRoom.host,
+        players: populatedRoom.players,
+        maxPlayers: populatedRoom.maxPlayers,
+        status: populatedRoom.status,
+        hasPasskey: !!populatedRoom.passkey,
       },
     });
   } catch (error) {

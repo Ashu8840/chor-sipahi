@@ -71,12 +71,25 @@ export const roomValidation = [
   body("mode")
     .isIn(["chat", "video"])
     .withMessage("Mode must be either chat or video"),
+  body("gameType")
+    .optional()
+    .isIn(["chor-sipahi", "bingo", "uno"])
+    .withMessage("Invalid game type"),
   body("isPublic").optional().toBoolean(),
   body("passkey")
     .optional({ values: "falsy" })
     .trim()
     .isLength({ min: 4, max: 20 })
     .withMessage("Passkey must be 4-20 characters"),
+  body("maxPlayers")
+    .optional()
+    .isInt({ min: 2, max: 10 })
+    .withMessage("Max players must be between 2 and 10"),
+  body("unoSettings.maxPlayers")
+    .if(body("gameType").equals("uno"))
+    .optional()
+    .isInt({ min: 2, max: 10 })
+    .withMessage("UNO max players must be between 2 and 10"),
 ];
 
 export const reportValidation = [

@@ -1,0 +1,373 @@
+.uno-game {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #1e3a8a 0%, #1e40af 100%);
+  position: relative;
+  overflow: hidden;
+}
+
+.uno-game.loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.loading-spinner {
+  font-size: 1.5rem;
+  color: white;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* Header */
+.game-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 2rem;
+  background: rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(10px);
+}
+
+.game-header h2 {
+  color: white;
+  margin: 0;
+  font-size: 1.5rem;
+}
+
+.leave-btn {
+  padding: 0.5rem 1rem;
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.3s ease;
+}
+
+.leave-btn:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.deck-count {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: white;
+  font-size: 1.2rem;
+  font-weight: 600;
+}
+
+.deck-icon {
+  font-size: 1.5rem;
+}
+
+/* Message Banner */
+.message-banner {
+  position: fixed;
+  top: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.9);
+  color: white;
+  padding: 1rem 2rem;
+  border-radius: 10px;
+  font-size: 1.2rem;
+  font-weight: 600;
+  z-index: 1000;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+}
+
+/* Game Board */
+.game-board {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 80px);
+  padding: 2rem;
+  gap: 1rem;
+}
+
+/* Other Players */
+.other-players {
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.player-info {
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
+  border-radius: 15px;
+  padding: 1rem;
+  min-width: 150px;
+  border: 2px solid transparent;
+  transition: all 0.3s ease;
+}
+
+.player-info.active {
+  border-color: #fbbf24;
+  box-shadow: 0 0 20px rgba(251, 191, 36, 0.5);
+}
+
+.player-name {
+  color: white;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+  text-align: center;
+}
+
+.player-cards {
+  display: flex;
+  gap: 2px;
+  justify-content: center;
+}
+
+.card-back {
+  width: 30px;
+  height: 45px;
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  border: 2px solid white;
+  border-radius: 5px;
+  position: relative;
+}
+
+.card-back::after {
+  content: "UNO";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) rotate(-15deg);
+  color: white;
+  font-size: 8px;
+  font-weight: bold;
+}
+
+.card-back.large {
+  width: 100px;
+  height: 150px;
+  border-radius: 10px;
+}
+
+.card-back.large::after {
+  font-size: 20px;
+}
+
+.uno-badge {
+  background: #fbbf24;
+  color: #92400e;
+  padding: 0.25rem 0.75rem;
+  border-radius: 20px;
+  font-weight: bold;
+  font-size: 0.8rem;
+  text-align: center;
+  margin-top: 0.5rem;
+}
+
+/* Center Area */
+.center-area {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 3rem;
+  flex: 1;
+  min-height: 250px;
+}
+
+.draw-pile {
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.pile-label {
+  color: white;
+  text-align: center;
+  margin-top: 0.5rem;
+  font-weight: 600;
+}
+
+.current-card-area {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
+
+.current-color {
+  color: white;
+  font-weight: 600;
+  font-size: 1.1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.color-indicator {
+  display: inline-block;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 3px solid white;
+  text-indent: -9999px;
+}
+
+.color-indicator.red { background: #e53e3e; }
+.color-indicator.blue { background: #3182ce; }
+.color-indicator.green { background: #38a169; }
+.color-indicator.yellow { background: #ecc94b; }
+
+.turn-indicator {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.turn-arrow {
+  font-size: 3rem;
+  color: #fbbf24;
+  animation: bounce 1s ease-in-out infinite;
+}
+
+@keyframes bounce {
+  0%, 100% { transform: translateX(0); }
+  50% { transform: translateX(10px); }
+}
+
+.current-player-name {
+  color: white;
+  font-weight: 600;
+  font-size: 1.1rem;
+  background: rgba(251, 191, 36, 0.2);
+  padding: 0.5rem 1rem;
+  border-radius: 10px;
+}
+
+/* My Hand */
+.my-hand-area {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
+
+.hand-label {
+  color: white;
+  font-weight: 600;
+  font-size: 1.1rem;
+}
+
+.my-hand {
+  display: flex;
+  gap: -20px;
+  justify-content: center;
+  flex-wrap: wrap;
+  max-width: 100%;
+  padding: 1rem;
+}
+
+.my-hand > div {
+  margin: 0 -10px;
+}
+
+.start-game-btn {
+  padding: 1rem 3rem;
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: white;
+  border: none;
+  border-radius: 15px;
+  font-size: 1.3rem;
+  font-weight: bold;
+  cursor: pointer;
+  box-shadow: 0 4px 20px rgba(16, 185, 129, 0.4);
+  transition: all 0.3s ease;
+}
+
+.start-game-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 30px rgba(16, 185, 129, 0.6);
+}
+
+.uno-button {
+  padding: 1rem 2rem;
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  color: white;
+  border: none;
+  border-radius: 15px;
+  font-size: 1.5rem;
+  font-weight: bold;
+  cursor: pointer;
+  box-shadow: 0 4px 20px rgba(239, 68, 68, 0.4);
+  animation: unoGlow 1s ease-in-out infinite;
+}
+
+@keyframes unoGlow {
+  0%, 100% { box-shadow: 0 4px 20px rgba(239, 68, 68, 0.4); }
+  50% { box-shadow: 0 4px 40px rgba(239, 68, 68, 0.8); }
+}
+
+/* Color Selector */
+.color-selector {
+  background: white;
+  padding: 2rem;
+  border-radius: 20px;
+  text-align: center;
+}
+
+.color-selector h3 {
+  margin: 0 0 1.5rem 0;
+  color: #2d3748;
+}
+
+.color-options {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1rem;
+}
+
+.color-btn {
+  width: 100px;
+  height: 100px;
+  border: 4px solid white;
+  border-radius: 15px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+}
+
+.color-btn.red { background: #e53e3e; }
+.color-btn.blue { background: #3182ce; }
+.color-btn.green { background: #38a169; }
+.color-btn.yellow { background: #ecc94b; }
+
+.color-btn:hover {
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .game-board {
+    padding: 1rem;
+  }
+
+  .center-area {
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .my-hand {
+    gap: -10px;
+  }
+
+  .my-hand > div {
+    margin: 0 -5px;
+  }
+
+  .turn-arrow {
+    font-size: 2rem;
+  }
+}
